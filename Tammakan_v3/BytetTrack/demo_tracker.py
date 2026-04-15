@@ -13,8 +13,8 @@ from tamakkan_tracker import TamakkanTracker
 # ── PATHS ─────────────────────────────────────────────────────────────────────
 WEIGHTS = r"C:\Users\Admin\Desktop\Grad_Project\Code\Yolov11s_training_Results\tamakkan_v2_hires\weights\best.pt"
 TRACKER_CONFIG = r"C:\Users\Admin\Gradution_Tammakan\Tammakan_v3\BytetTrack\bytetrack_tamakkan.yaml"
-INPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\Dashcam_clips\20260105120359_0060.mp4"   # ← change this
-OUTPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Bytetrack_Results_V3\dashcam4_tracked.mp4"  # ← change this
+INPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\Dashcam_clips\20260218184427_0060.mp4"  # ← change this
+OUTPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Bytetrack_Results_V3\dashcam6_tracked.mp4"  # ← change this
 
 # ── COLOR PER CLASS (BGR for OpenCV) ──────────────────────────────────────────
 # Distinct colors so different classes are easy to tell apart.
