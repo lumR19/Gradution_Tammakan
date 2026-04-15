@@ -8,13 +8,13 @@ Use this to visually verify tracking quality before deploying.
 import cv2
 import time
 from pathlib import Path
-from Tammakan_v3.BytetTrack.tamakkan_tracker import TamakkanTracker
+from tamakkan_tracker import TamakkanTracker
 
 # ── PATHS ─────────────────────────────────────────────────────────────────────
 WEIGHTS = r"C:\Users\Admin\Desktop\Grad_Project\Code\Yolov11s_training_Results\tamakkan_v2_hires\weights\best.pt"
-TRACKER_CONFIG = "bytetrack_tamakkan.yaml"
-INPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\Dashcam_clips\10_Sec_Clip.mp4"   # ← change this
-OUTPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Bytetrack_Results_V3"  # ← change this
+TRACKER_CONFIG = r"C:\Users\Admin\Gradution_Tammakan\Tammakan_v3\BytetTrack\bytetrack_tamakkan.yaml"
+INPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\Dashcam_clips\20260105120359_0060.mp4"   # ← change this
+OUTPUT_VIDEO = r"C:\Users\Admin\Desktop\Grad_Project\Code\Bytetrack_Results_V3\dashcam4_tracked.mp4"  # ← change this
 
 # ── COLOR PER CLASS (BGR for OpenCV) ──────────────────────────────────────────
 # Distinct colors so different classes are easy to tell apart.
