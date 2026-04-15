@@ -1,0 +1,45 @@
+# bytetrack_tamakkan.yaml
+# ByteTrack config tuned for Tamakkan dashcam footage.
+# Driving-specific challenges:
+#   - Objects move fast across frames (cars at 80km/h)
+#   - Heavy occlusion (cars block other cars)
+#   - VRU / pedestrians often partially hidden
+#   - We trained YOLO at conf=0.26 optimal, so low-confidence detections matter
+
+tracker_type: bytetrack
+
+# --- High confidence threshold ---
+# First-stage matching uses detections above this confidence.
+# Set to your YOLO optimal F1 confidence (0.26 from your F1 curve).
+track_high_thresh: 0.25
+
+# --- Low confidence threshold ---
+# Second-stage matching uses detections between track_low and track_high.
+# ByteTrack's secret sauce: low-confidence detections are MATCHED against
+# existing tracks (not used to create new tracks). Helps recover occluded objects.
+# Lower this to recover more tentative VRU/person detections.
+track_low_thresh: 0.10
+
+# --- New track threshold ---
+# Detections above this confidence can spawn brand-new tracks.
+# Set higher than track_high_thresh to avoid spurious new IDs.
+new_track_thresh: 0.40
+
+# --- Track buffer ---
+# How many frames to keep a "lost" track alive before deleting it.
+# At 30fps, 60 frames = 2 seconds. Tune to expected occlusion duration.
+# Higher = better ID persistence through occlusion, but risk of ID swaps.
+# 60 is a good middle ground for driving (cars often get briefly hidden).
+track_buffer: 60
+
+# --- Match threshold ---
+# IoU threshold for matching detections to existing tracks.
+# Lower = looser matching (more permissive, may swap IDs)
+# Higher = stricter matching (may break tracks during fast motion)
+# 0.8 is the ByteTrack default; we keep it.
+match_thresh: 0.8
+
+# --- Fuse score ---
+# Whether to use detection confidence as part of the matching cost.
+# Recommended True — penalizes matching low-confidence detections to high-quality tracks.
+fuse_score: true
