@@ -50,7 +50,6 @@ export default function HomeScreen() {
     setSessions,
     setStats,
     setDailyTip,
-    setDashcamConnected,
   } = useSessionStore();
 
   const firstName = (user?.name ?? '').split(' ')[0] || 'User';
@@ -112,21 +111,6 @@ export default function HomeScreen() {
               : 'Ready for your driving session?'}
           </Text>
         </View>
-
-        {/* DEV toggle — remove after Batch 4 */}
-        <TouchableOpacity
-          style={styles.devToggle}
-          onPress={() => setDashcamConnected(!dashcamConnected)}
-        >
-          <MaterialCommunityIcons
-            name={dashcamConnected ? 'video-check' : 'video-off'}
-            size={12}
-            color={Colors.outline.DEFAULT}
-          />
-          <Text style={styles.devToggleText}>
-            DEV: {dashcamConnected ? 'Disconnect' : 'Connect'} dashcam
-          </Text>
-        </TouchableOpacity>
 
         {dashcamConnected ? (
           <>
@@ -459,22 +443,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: Colors.surface.onVariant,
-  },
-  // ── DEV toggle ──
-  devToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: Colors.surface.containerHigh,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  devToggleText: {
-    fontSize: 10,
-    color: Colors.outline.DEFAULT,
-    fontWeight: '500',
   },
   // ── CONNECTED: Start button ──
   startBtn: {
