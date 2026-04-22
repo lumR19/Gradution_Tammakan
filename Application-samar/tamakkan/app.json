@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Tamakkan",
+    "slug": "tamakkan",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "tamakkan",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.tamakkan.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
