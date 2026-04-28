@@ -52,13 +52,15 @@ ROI_BOTTOM      = int(IMG_H * ROI_BOTTOM_FRAC)
 # reflected light. If we use the same confidence cutoff for night and day,
 # most night lanes get filtered out. So we check brightness per frame
 # and switch between these two values automatically.
-BASE_CONFIDENCE = 0.15
-DARK_CONFIDENCE = 0.08
+BASE_CONFIDENCE = 0.25   # day — stricter
+DARK_CONFIDENCE = 0.15   # night — was too low before
 DARK_THRESHOLD  = 80
 
-# A lane needs at least 6 detected points before we treat it as real.
+
+
+# A lane needs at least 7 detected points before we treat it as real.
 # Fewer than that is usually noise from road texture or shadows.
-MIN_POINTS   = 6
+MIN_POINTS = 7  
 CURVE_MARGIN = 40
 
 LANE_COLORS = [
@@ -166,6 +168,7 @@ class LaneDetector:
                 if not (ROI_TOP <= int(row_anchor) <= ROI_BOTTOM):
                     continue
                 if exist_flags[row_idx, lane_idx]:
+                    
                     x = float(COL_SAMPLE[lane_points[row_idx, lane_idx]])
                     y = float(row_anchor)
                     xs.append(x)

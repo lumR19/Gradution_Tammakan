@@ -20,43 +20,50 @@ from model.model import parsingNet
 #   canvas   = visualize(bgr_frame, lanes)
 
 
-# these are locked to the CULane training setup and cannot be changed
-# without retraining. the pool layer inside the model expects exactly 800x288.
+# locked to CULane training setup — the pool layer expects exactly 800x288
 IMG_W  = 800
 IMG_H  = 288
 GRID_W = 200
 
-# 18 horizontal positions where the model looks for lane points.
-# I recalculated these from the original CULane values (260-530px for 590px images)
-# to fit our 288px height. the last value was a duplicate 275 which I fixed to 288.
 CULANE_ROW_ANCHORS = [
     80,  93, 106, 119, 132, 145, 158, 171, 184,
     197, 210, 223, 236, 249, 262, 275, 280, 288
 ]
 
 # CULane training used 1640px wide images. we resize to 800px.
-# without this scaling the lanes appear shifted left/right from where they actually are.
+# without this scaling the lanes appear shifted from where they actually are.
 COL_SAMPLE = np.linspace(0, 1640 - 1, GRID_W) * (IMG_W / 1640)
 
-# ROI — top 45% is sky/signs, bottom 8% is car hood. no lanes live there.
-# using fractions so the values adapt automatically to any image height.
+# top 45% is sky/signs, bottom 8% is car hood — no lanes live in either region
 ROI_TOP_FRAC    = 0.45
 ROI_BOTTOM_FRAC = 0.92
 ROI_TOP         = int(IMG_H * ROI_TOP_FRAC)
 ROI_BOTTOM      = int(IMG_H * ROI_BOTTOM_FRAC)
 
-# at night the model sees faint lane markings and gives lower confidence scores.
-# if we use the same threshold for night and day, most night lanes get filtered out.
-# so we check brightness per frame and switch automatically.
-BASE_CONFIDENCE = 0.15
-DARK_CONFIDENCE = 0.08
+# night lanes look faint to the model so it produces lower scores.
+# using the same threshold for day and night causes most night lanes to be filtered out.
+# the script measures brightness per frame and switches automatically.
+# raised from 0.15/0.08 — old values were too relaxed and let noise through.
+BASE_CONFIDENCE = 0.25
+DARK_CONFIDENCE = 0.15
 DARK_THRESHOLD  = 80
 
-# raised from 4 to 5 to reduce false lanes from road texture and barriers
-MIN_POINTS = 5
+# raised from 5 — 7 anchor hits means the model saw the lane consistently
+# across multiple rows, not just a few scattered noisy points
+MIN_POINTS = 7
 
-# tightened from 40 to 20 to stop the polynomial from swinging wide on noisy frames
 CURVE_MARGIN = 20
+
+# how spiky the model's column scores need to be before we trust a detection.
+# a confused model spreads scores evenly across all columns.
+# a confident model puts a big spike on one column.
+# if the gap between the best column and the average is too small — skip it.
+SCORE_GAP_THRESHOLD = 0.02
+
+# a real lane should span at least 30% of the ROI height vertically.
+# false positives from barriers and road texture usually only fire on
+# a tiny strip of 2-3 rows and get killed by this check.
+MIN_LANE_HEIGHT_FRACTION = 0.30
 
 LANE_COLORS = [
     ( 80,  80, 255),
@@ -80,8 +87,7 @@ class LaneDetector:
     """
 
     def __init__(self, weights_path, backbone='18', device=None):
-        # auto-pick GPU if one exists, otherwise fall back to CPU silently.
-        # on your laptop this will say 'cpu'. on a Jetson it will say 'cuda'.
+        # auto-pick GPU if available, fall back to CPU silently
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
@@ -91,7 +97,6 @@ class LaneDetector:
         if self.device.type == 'cuda':
             print(f"  GPU: {torch.cuda.get_device_name(0)}")
 
-        # build the empty model structure first, then fill it with pretrained weights
         self.net = parsingNet(
             pretrained=False,
             backbone=backbone,
@@ -104,7 +109,7 @@ class LaneDetector:
             state_dict = state_dict['model']
 
         # CULane weights were saved from multi-GPU training which adds 'module.'
-        # to every key. stripping it lets the keys match our single-GPU model.
+        # to every key — strip it so keys match our single-GPU model
         clean = {}
         for k, v in state_dict.items():
             clean[k[7:] if k.startswith('module.') else k] = v
@@ -114,7 +119,7 @@ class LaneDetector:
         self.net.eval()
 
         # ResNet-18 was pretrained on ImageNet so it needs inputs normalized
-        # with these exact mean and std values. skipping this gives garbage output.
+        # with these exact values — skipping normalization gives garbage output
         self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(
@@ -140,21 +145,14 @@ class LaneDetector:
         Output: torch tensor (1, 3, 288, 800), normalized with ImageNet mean/std,
                 moved to the same device as the model (GPU or CPU)
         """
-        # resize to the exact size the model's pool layer was built for
         resized = cv2.resize(frame_bgr, (IMG_W, IMG_H))
-
-        # OpenCV loads BGR but PyTorch expects RGB
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-
-        # ToTensor converts 0-255 to 0.0-1.0, unsqueeze adds the batch dimension
-        # final shape: (1, 3, 288, 800)
-        tensor = self.transform(Image.fromarray(rgb)).unsqueeze(0)
+        rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        tensor  = self.transform(Image.fromarray(rgb)).unsqueeze(0)
         return tensor.to(self.device), resized
 
 
     def _decode_output(self, output, confidence):
-        # output[0] removes the batch dimension
-        # we drop the last column because that's the "no lane" class
+        # remove batch dimension, drop the "no lane" class column
         scores_np   = output[0].cpu().numpy()[:GRID_W, :, :]
         lane_points = np.argmax(scores_np, axis=0)
         max_scores  = np.max(scores_np, axis=0)
@@ -163,15 +161,37 @@ class LaneDetector:
         lanes = []
         for lane_idx in range(4):
             xs, ys, confs = [], [], []
+
             for row_idx, row_anchor in enumerate(CULANE_ROW_ANCHORS):
                 if not (ROI_TOP <= int(row_anchor) <= ROI_BOTTOM):
                     continue
+
                 if exist_flags[row_idx, lane_idx]:
+
+                    # FIX 3 — score gap check
+                    # a confused model spreads scores evenly across all columns.
+                    # a confident one puts a clear spike on one column.
+                    # if the gap is too small the model is guessing — skip this point.
+                    score_gap = (np.max(scores_np[:, row_idx, lane_idx]) -
+                                 np.mean(scores_np[:, row_idx, lane_idx]))
+                    if score_gap < SCORE_GAP_THRESHOLD:
+                        continue
+
                     x = float(COL_SAMPLE[lane_points[row_idx, lane_idx]])
                     y = float(row_anchor)
                     xs.append(x)
                     ys.append(y)
                     confs.append(float(max_scores[row_idx, lane_idx]))
+
+            # FIX 4 — lane height span check
+            # real lanes span the road from near to far — they cover a tall vertical strip.
+            # false positives from barriers and noise only fire on a few scattered rows.
+            # we require at least 30% of the ROI height to count as a real lane.
+            lane_height_span  = (max(ys) - min(ys)) if ys else 0
+            min_required_span = (ROI_BOTTOM - ROI_TOP) * MIN_LANE_HEIGHT_FRACTION
+            if lane_height_span < min_required_span:
+                continue
+
             if len(xs) > MIN_POINTS:
                 lanes.append((xs, ys, confs))
 
@@ -182,17 +202,16 @@ class LaneDetector:
         xs_arr = np.array(xs, dtype=np.float64)
         ys_arr = np.array(ys, dtype=np.float64)
 
-        # we fit x = f(y) rather than y = f(x) because each y maps to one x
-        # but one x could have multiple y values. the math is more stable this way.
-        # use degree 2 only when we have enough points for a stable parabola fit.
+        # fit x = f(y) — each y maps to one x, math is more stable this way.
+        # degree 2 only when we have enough points for a stable parabola.
         degree      = 2 if len(xs) >= 7 else 1
         poly_coeffs = np.polyfit(ys_arr, xs_arr, deg=degree)
 
         x_at_bottom = float(np.polyval(poly_coeffs, ROI_BOTTOM))
         side        = 'left' if x_at_bottom < IMG_W / 2 else 'right'
 
-        # divide by 20 to normalize the raw model scores to roughly 0.0-1.0
-        # the raw scores accumulate across anchor points so they exceed 1.0 by default
+        # raw scores accumulate across anchor points and exceed 1.0 by default
+        # divide by 20 to normalize to roughly 0.0-1.0
         normalized_conf = float(min(np.mean(confs) / 20.0, 1.0))
 
         return {
@@ -211,12 +230,11 @@ class LaneDetector:
         Input:  bgr_frame — numpy array, any resolution, BGR (standard OpenCV format)
         Output: list of lane dicts (empty list if nothing detected)
         """
-        resized_for_check       = cv2.resize(bgr_frame, (IMG_W, IMG_H))
-        confidence, _           = self._get_confidence_threshold(resized_for_check)
-        input_tensor, _         = self._preprocess(bgr_frame)
+        resized_for_check = cv2.resize(bgr_frame, (IMG_W, IMG_H))
+        confidence, _     = self._get_confidence_threshold(resized_for_check)
+        input_tensor, _   = self._preprocess(bgr_frame)
 
-        # no_grad tells PyTorch not to build a computation graph — we don't need
-        # gradients at inference time and skipping them saves memory and time
+        # skip gradient tracking — we're not training, just running forward pass
         with torch.no_grad():
             output = self.net(input_tensor)
 
@@ -227,7 +245,7 @@ class LaneDetector:
             try:
                 result.append(self._fit_lane(xs, ys, confs))
             except Exception:
-                # polyfit can fail if all points share the same x — just skip that lane
+                # polyfit fails if all points share the same x — just skip that lane
                 pass
 
         return result
@@ -238,9 +256,8 @@ def visualize(bgr_frame, lanes, show_roi=True):
     Draws smooth polynomial curves on the frame for each detected lane.
     Works on a copy so the original frame is never modified.
 
-    Kept as a standalone function (not inside LaneDetector) so you can:
-    - run detection without drawing if you only need the lane data
-    - swap in a different drawing style without touching the detection code
+    Kept as a standalone function so you can run detection without drawing
+    or change the visual style without touching detection code.
     """
     canvas = cv2.resize(bgr_frame, (IMG_W, IMG_H)).copy()
 
@@ -286,7 +303,6 @@ def visualize(bgr_frame, lanes, show_roi=True):
         for x, y in points_xy:
             cv2.circle(canvas, (int(x), int(y)), 3, color, -1)
 
-        # label shows side and normalized confidence score
         if len(points_xy) > 0:
             mid = len(points_xy) // 2
             cv2.putText(canvas,
@@ -302,11 +318,11 @@ def export_to_onnx(weights_path, output_path='culane_18.onnx'):
     Converts the PyTorch model to ONNX format.
     Run this once on any machine — doesn't need a Jetson.
 
-    After you get the .onnx file, copy it to the Jetson and run:
+    After getting the .onnx file, copy it to the Jetson and run:
         trtexec --onnx=culane_18.onnx --saveEngine=culane_fp16.engine --fp16
 
-    fp16 = half precision. twice the throughput, half the memory,
-    almost no accuracy difference. this is how you get 100+ FPS on a Jetson.
+    fp16 = half precision — twice the throughput, half the memory,
+    almost no accuracy drop. this is how you get 100+ FPS on a Jetson.
     """
     print("Loading model for ONNX export...")
 
@@ -325,8 +341,8 @@ def export_to_onnx(weights_path, output_path='culane_18.onnx'):
     net.load_state_dict(clean, strict=False)
     net.eval()
 
-    # ONNX export traces the model by running it once on this dummy input.
-    # the shape must match exactly what the real input looks like.
+    # ONNX export traces the model by running it once on this dummy input
+    # shape must match the real input exactly
     dummy = torch.zeros(1, 3, IMG_H, IMG_W)
 
     print(f"Exporting to {output_path} ...")
@@ -341,7 +357,7 @@ def export_to_onnx(weights_path, output_path='culane_18.onnx'):
         }
     )
     print(f"Saved: {output_path}")
-    print(f"\nOn the Jetson, run:")
+    print(f"\nOn the Jetson run:")
     print(f"  trtexec --onnx={output_path} --saveEngine=culane_fp16.engine --fp16")
     return output_path
 
@@ -349,7 +365,7 @@ def export_to_onnx(weights_path, output_path='culane_18.onnx'):
 def run_on_video(weights_path, video_in, output_dir, device=None):
     """
     Processes a full video and prints the evaluation report at the end.
-    Uses LaneDetector and visualize() separately so the logic stays clean.
+    Uses LaneDetector and visualize() separately so logic stays clean.
     """
     os.makedirs(output_dir, exist_ok=True)
     video_out = os.path.join(
@@ -477,10 +493,10 @@ def run_on_video(weights_path, video_in, output_dir, device=None):
 if __name__ == '__main__':
 
     WEIGHTS    = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\culane_18.pth'
-    VIDEO_IN   = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\dataset_input_forTEST\2video_test_night.mp4'
+    VIDEO_IN   = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\dataset_input_forTEST\WIN_20260428_19_11_44_Pro.mp4'
     OUTPUT_DIR = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\test_output_Culane'
 
     run_on_video(WEIGHTS, VIDEO_IN, OUTPUT_DIR)
 
-    # uncomment when you're ready to export for Jetson
+    # uncomment when ready to export for Jetson
     # export_to_onnx(WEIGHTS, output_path='culane_18.onnx')
