@@ -2,13 +2,14 @@ import cv2
 import torch
 import numpy as np
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+from ultralytics import YOLO
 
 
+# ===============================
+# Depth Estimator Class
+# ===============================
 class DepthEstimator:
     def __init__(self, model_name="LiheYoung/depth-anything-small-hf", device="cpu"):
-        """
-        Initialize model and processor
-        """
         self.device = torch.device(device)
 
         self.processor = AutoImageProcessor.from_pretrained(model_name)
@@ -19,9 +20,6 @@ class DepthEstimator:
         self.cached_depth = None
 
     def _predict(self, frame):
-        """
-        Run depth estimation on a single frame
-        """
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         inputs = self.processor(images=image, return_tensors="pt").to(self.device)
 
@@ -36,11 +34,9 @@ class DepthEstimator:
         return depth_norm.astype(np.uint8)
 
     def update(self, frame):
-        """
-        Run inference every 4 frames only (caching)
-        """
         self.frame_count += 1
 
+        # run inference every 4 frames
         if self.frame_count % 4 == 0 or self.cached_depth is None:
             self.cached_depth = self._predict(frame)
 
@@ -48,14 +44,36 @@ class DepthEstimator:
 
 
 # ===============================
-# Threshold Calibration Function
+# Tailgating Detector
 # ===============================
-def calibrate_threshold(estimator, close_video, far_video, num_frames=30):
-    """
-    Compute threshold based on close and far videos
-    """
+class TailgatingDetector:
+    def __init__(self, estimator):
+        self.estimator = estimator
+        self.yolo = YOLO("yolov8n.pt")
+        self.threshold = None
 
-    def get_avg_depth(video_path):
+    def detect_vehicle_depth(self, frame):
+        results = self.yolo(frame, verbose=False)[0]
+        vehicle_depths = []
+
+        for box in results.boxes:
+            cls = int(box.cls[0])
+
+            # car=2, bus=5, truck=7
+            if cls in [2, 5, 7]:
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+
+                depth_map = self.estimator.update(frame)
+                roi = depth_map[y1:y2, x1:x2]
+
+                if roi.size > 0:
+                    vehicle_depths.append(np.mean(roi))
+
+        if len(vehicle_depths) > 0:
+            return np.mean(vehicle_depths)
+        return None
+
+    def calibrate_from_video(self, video_path, num_frames=50):
         cap = cv2.VideoCapture(video_path)
         values = []
 
@@ -65,32 +83,35 @@ def calibrate_threshold(estimator, close_video, far_video, num_frames=30):
             if not ret:
                 break
 
-            depth = estimator.update(frame)
-            values.append(np.mean(depth))
-            count += 1
+            depth_val = self.detect_vehicle_depth(frame)
+
+            if depth_val is not None:
+                values.append(depth_val)
+                count += 1
 
         cap.release()
-        return np.mean(values)
 
-    close_avg = get_avg_depth(close_video)
-    far_avg = get_avg_depth(far_video)
+        if len(values) == 0:
+            print("No vehicles detected → using default threshold")
+            self.threshold = 120
+        else:
+            self.threshold = np.mean(values) * 1.2  # safety margin
 
-    threshold = (close_avg + far_avg) / 2
+        print("Threshold:", self.threshold)
 
-    print("Close avg depth:", close_avg)
-    print("Far avg depth:", far_avg)
-    print("Calibrated threshold:", threshold)
+    def check_tailgating(self, frame):
+        depth_val = self.detect_vehicle_depth(frame)
 
-    return threshold
+        if depth_val is None:
+            return False
+
+        return depth_val > self.threshold
 
 
 # ===============================
 # Video Processing
 # ===============================
-def process_video(input_path, output_path, estimator, threshold=None):
-    """
-    Apply depth estimation on video and save output
-    """
+def process_video(input_path, output_path, estimator, detector):
 
     cap = cv2.VideoCapture(input_path)
 
@@ -107,19 +128,16 @@ def process_video(input_path, output_path, estimator, threshold=None):
             break
 
         depth_map = estimator.update(frame)
-
-        # convert to color
         colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_INFERNO)
 
-        # optional: tailgating detection
-        if threshold is not None:
-            if np.mean(depth_map) > threshold:
-                cv2.putText(colored, "WARNING: TOO CLOSE!", (50, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        # tailgating detection
+        if detector.check_tailgating(frame):
+            cv2.putText(colored, "TAILGATING WARNING!", (50, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         out.write(colored)
 
-        cv2.imshow("Depth Output", colored)
+        cv2.imshow("Output", colored)
         if cv2.waitKey(1) & 0xFF == 27:
             break
 
@@ -131,48 +149,24 @@ def process_video(input_path, output_path, estimator, threshold=None):
 
 
 # ===============================
-# ONNX Export for TensorRT
-# ===============================
-def export_to_onnx(model, save_path="depth_model.onnx"):
-    """
-    Export PyTorch model to ONNX
-    """
-
-    dummy_input = torch.randn(1, 3, 384, 384)
-
-    torch.onnx.export(
-        model,
-        dummy_input,
-        save_path,
-        input_names=["input"],
-        output_names=["output"],
-        opset_version=11
-    )
-
-    print("Model exported to:", save_path)
-
-
-# ===============================
-# MAIN (Example Usage)
+# MAIN
 # ===============================
 if __name__ == "__main__":
 
-    # initialize estimator (CPU forced)
+    # initialize depth model (CPU only)
     estimator = DepthEstimator(device="cpu")
 
-    # ===== Step 1: Calibrate 
-    
-    threshold = calibrate_threshold(estimator, "close.mp4", "far.mp4")
+    # initialize detector
+    detector = TailgatingDetector(estimator)
 
-    
+    # automatic calibration
+    detector.calibrate_from_video("input.mp4")
 
-    # ===== Step 2: Process Video =====
+    # process video
     process_video(
         input_path="input.mp4",
         output_path="output_depth.mp4",
         estimator=estimator,
-        threshold=threshold
+        detector=detector
     )
 
-    # ===== Step 3: Export to ONNX =====
-    export_to_onnx(estimator.model)
