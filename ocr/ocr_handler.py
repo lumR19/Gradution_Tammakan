@@ -1,6 +1,5 @@
 
 
-
 import easyocr
 import cv2
 import re
@@ -22,10 +21,8 @@ class TamakkanOCR:
         results = self.reader.readtext(thresh, detail=0)
         detected_text = " ".join(results).strip().upper()
 
-        # خلي فقط الأرقام
         detected_text = re.sub(r'[^0-9]', '', detected_text)
 
-        # رجع فقط السرعات الصحيحة
         if detected_text in self.valid_speeds:
             return detected_text
 
