@@ -476,9 +476,9 @@ def run_on_video(weights_path, video_in, output_dir, device=None):
 
 if __name__ == '__main__':
 
-    WEIGHTS    = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\culane_18.pth'
-    VIDEO_IN   = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\dataset_input_forTEST\2video_test_night.mp4'
-    OUTPUT_DIR = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\test_output_Culane'
+    WEIGHTS    = r"C:\Users\Admin\Desktop\Grad_Project\Code\UFLD\culane_18.pth"
+    VIDEO_IN   = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\Dashcam_clips\20260421212545_0060.mp4"
+    OUTPUT_DIR = r"C:\Users\Admin\Desktop\Grad_Project\Code\UFLD\OUTPUT"
 
     run_on_video(WEIGHTS, VIDEO_IN, OUTPUT_DIR)
 
