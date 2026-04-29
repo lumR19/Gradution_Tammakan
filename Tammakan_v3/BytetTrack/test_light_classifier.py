@@ -32,7 +32,7 @@ CROPS_ROOT = Path("crops")
 WRONG_DIR = Path("crops/wrong")
 
 # Expected-color folders to test
-CLASSES = ["red", "green", "yellow", "unknown"]
+CLASSES = ["red", "green", "unknown"]
 
 
 def main():
@@ -111,7 +111,7 @@ def main():
 
     # ── Confusion matrix ─────────────────────────────────────────────────────
     print("\nConfusion matrix (rows = actual, columns = predicted):")
-    all_predicted = ["red", "yellow", "green", "unknown"]
+    all_predicted = ["red", "green", "unknown"]
     header = "  expected \\ predicted | " + " | ".join(f"{p:>8}" for p in all_predicted)
     print(header)
     print("  " + "-" * (len(header) - 2))

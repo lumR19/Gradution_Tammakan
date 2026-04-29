@@ -31,7 +31,7 @@ WEIGHTS = r"C:\Users\Admin\Desktop\Grad_Project\Code\Yolov11s_training_Results\t
 
 # Point this at the FOLDER containing your dashcam clips
 # The script will process every .mp4 in this folder
-VIDEO_FOLDER = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\Dashcam_clips"
+VIDEO_FOLDER = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\final-test-data"
 
 # Output folder (relative to where you run the script)
 OUTPUT_DIR = Path("crops/unsorted")
