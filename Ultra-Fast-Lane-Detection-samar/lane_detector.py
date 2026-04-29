@@ -14,10 +14,10 @@ sys.path.insert(0, '.')
 from model.model import parsingNet
 
 
-WEIGHTS   = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\culane_18.pth'
-VIDEO_IN  = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\dataset_input_forTEST\3NewDataset_Test.mp4'
+WEIGHTS   = r"C:\Users\Admin\Desktop\Grad_Project\Code\UFLD\culane_18.pth"
+VIDEO_IN  = r"C:\Users\Admin\Desktop\Grad_Project\Code\Datasets\final-test-data\WIN_20260428_18_59_22_Pro.mp4"
 
-OUTPUT_DIR = r'C:\Users\Lenovo\Desktop\Graduation_tammakan\ufld_project\Ultra-Fast-Lane-Detection\test_output_Culane'
+OUTPUT_DIR = r"C:\Users\Admin\Desktop\Grad_Project\Code\UFLD\OUTPUT"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 VIDEO_OUT  = os.path.join(OUTPUT_DIR, os.path.splitext(os.path.basename(VIDEO_IN))[0] + '_culane_output.mp4')
 
