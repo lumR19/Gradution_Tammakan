@@ -16,7 +16,8 @@ Outputs:
       so you can visually inspect where the classifier is failing.
 
 Run with:
-    python test_light_classifier.py
+python test_light_classifier.py
+    
 """
 
 import shutil
