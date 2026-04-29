@@ -1,6 +1,7 @@
 import cv2
 import os
 import csv
+import time
 from pathlib import Path
 from ultralytics import YOLO
 from ocr_handler import TamakkanOCR
@@ -14,10 +15,18 @@ OUTPUT_FOLDER = r"D:\tamakken"
 
 TRAFFIC_SIGN_ID = 5
 CONF_THRESHOLD = 0.50
-OCR_EVERY_N_FRAMES = 3   # 1 = كل فريم، 3 أخف وأنسب غالبًا
+OCR_EVERY_N_FRAMES = 5
+
+# --- New gating settings ---
+MIN_OCR_CONF = 0.75          # only run OCR if YOLO confidence >= 0.75
+MIN_BBOX_HEIGHT = 60         # only run OCR if sign height >= 60 px
+CACHE_TTL_FRAMES = 30        # keep last successful OCR result for 30 frames
+
+# --- EasyOCR device ---
+USE_GPU_FOR_OCR = False      # on Jetson: change to True and benchmark
 
 # =========================================================
-# PROCESS ONE VIDEO
+# PROCESS THE VIDEO
 # =========================================================
 def process_video(video_path, model, ocr_manager, output_folder):
     video_path = Path(video_path)
@@ -43,11 +52,16 @@ def process_video(video_path, model, ocr_manager, output_folder):
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
 
     frame_idx = 0
+
+    # region_key -> {"speed": "...", "last_seen": frame_idx}
     last_speeds = {}
+
+    total_ocr_calls = 0
+    total_ocr_time = 0.0
 
     with open(output_csv_path, mode='w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(["frame", "speed", "confidence", "x1", "y1", "x2", "y2"])
+        writer.writerow(["frame", "speed", "confidence", "bbox_height", "x1", "y1", "x2", "y2"])
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -65,7 +79,7 @@ def process_video(video_path, model, ocr_manager, output_folder):
                     conf = float(box.conf[0])
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                    # فقط لوحات المرور
+                    # Only traffic signs
                     if cls != TRAFFIC_SIGN_ID:
                         continue
 
@@ -79,24 +93,59 @@ def process_video(video_path, model, ocr_manager, output_folder):
                     if cropped_sign.size == 0:
                         continue
 
+                    bbox_height = y2 - y1
                     region_key = f"{x1//20}_{y1//20}_{x2//20}_{y2//20}"
                     speed = ""
 
-                    # OCR كل كم فريم لتخفيف الحمل
-                    if frame_idx % OCR_EVERY_N_FRAMES == 0:
-                        speed = ocr_manager.read_speed_sign(cropped_sign)
-                        if speed:
-                            last_speeds[region_key] = speed
-                    else:
-                        speed = last_speeds.get(region_key, "")
+                    # -------------------------------------------------
+                    # 1) CACHE FIRST: use cached value if still fresh
+                    # -------------------------------------------------
+                    cached = last_speeds.get(region_key)
+                    if cached and (frame_idx - cached["last_seen"] <= CACHE_TTL_FRAMES):
+                        speed = cached["speed"]
 
-                    # إذا ما اكتشف رقم سرعة صحيح، تجاهل
+                    # -------------------------------------------------
+                    # 2) GATING + OCR
+                    # Only run OCR every N frames AND only if:
+                    #   - bbox height >= 60
+                    #   - YOLO conf >= 0.75
+                    # -------------------------------------------------
+                    should_run_ocr = (
+                        frame_idx % OCR_EVERY_N_FRAMES == 0 and
+                        bbox_height >= MIN_BBOX_HEIGHT and
+                        conf >= MIN_OCR_CONF
+                    )
+
+                    if should_run_ocr:
+                        start_time = time.perf_counter()
+                        detected_speed = ocr_manager.read_speed_sign(cropped_sign)
+                        ocr_elapsed = time.perf_counter() - start_time
+
+                        total_ocr_calls += 1
+                        total_ocr_time += ocr_elapsed
+
+                        if detected_speed:
+                            speed = detected_speed
+                            last_speeds[region_key] = {
+                                "speed": detected_speed,
+                                "last_seen": frame_idx
+                            }
+
+                    # -------------------------------------------------
+                    # 3) Skip if no valid speed
+                    # -------------------------------------------------
                     if not speed:
                         continue
 
-                    print(f"[{video_path.name}] Frame {frame_idx}: Detected Speed = {speed}")
+                    # refresh cache timestamp if using cached result
+                    if region_key in last_speeds:
+                        last_speeds[region_key]["last_seen"] = frame_idx
 
-                    # رسم البوكس والسرعة
+                    print(
+                        f"[{video_path.name}] Frame {frame_idx}: "
+                        f"Detected Speed = {speed} | conf={conf:.2f} | h={bbox_height}"
+                    )
+
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     label = f"Speed: {speed}"
                     cv2.putText(
@@ -109,7 +158,9 @@ def process_video(video_path, model, ocr_manager, output_folder):
                         2
                     )
 
-                    writer.writerow([frame_idx, speed, round(conf, 4), x1, y1, x2, y2])
+                    writer.writerow([
+                        frame_idx, speed, round(conf, 4), bbox_height, x1, y1, x2, y2
+                    ])
 
             out.write(frame)
             frame_idx += 1
@@ -120,6 +171,14 @@ def process_video(video_path, model, ocr_manager, output_folder):
     print(f"Done: {video_path.name}")
     print(f"Saved video -> {output_video_path}")
     print(f"Saved csv   -> {output_csv_path}")
+
+    if total_ocr_calls > 0:
+        avg_ocr_time = total_ocr_time / total_ocr_calls
+        print(f"OCR calls: {total_ocr_calls}")
+        print(f"Average OCR time per call: {avg_ocr_time:.4f} sec")
+    else:
+        print("OCR calls: 0")
+
     print("-" * 60)
 
 # =========================================================
@@ -132,7 +191,7 @@ def main():
     model = YOLO(MODEL_PATH)
 
     print("Loading EasyOCR...")
-    ocr_manager = TamakkanOCR(use_gpu=False)
+    ocr_manager = TamakkanOCR(use_gpu=USE_GPU_FOR_OCR)
 
     video_extensions = [".mp4", ".avi", ".mov", ".mkv"]
     videos = []
