@@ -51,8 +51,10 @@ class DepthEstimator:
 class TailgatingDetector:
     def __init__(self, estimator):
         self.estimator = estimator
-        self.yolo = YOLO("yolov8n.pt")
+        self.yolo = YOLO("C:\Users\linam\Gradution_Tammakan\depth_anything\best.pt\archive")
         self.threshold = None
+        print(self.yolo.names)
+
 
     def detect_vehicle_depth(self, frame):
         results = self.yolo(frame, verbose=False)[0]
@@ -61,8 +63,9 @@ class TailgatingDetector:
         for box in results.boxes:
             cls = int(box.cls[0])
 
-            # car=2, bus=5, truck=7
-            if cls in [2, 5, 7]:
+            
+            label = self.yolo.names[cls]
+            if label in ["car", "bus", "truck"]:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
 
                 depth_map = self.estimator.update(frame)
