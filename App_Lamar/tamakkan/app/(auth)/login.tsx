@@ -16,6 +16,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
+import AppLogo from '@/components/AppLogo';
 import { useAuthStore } from '@/stores/authStore';
 import { login as apiLogin } from '@/services/api';
 import { validateSaudiId } from '@/utils/validators';
@@ -63,10 +64,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <View style={styles.logoRow}>
-          <View style={styles.logoMini}>
-            <MaterialCommunityIcons name="chip" size={18} color="#fff" />
-          </View>
-          <Text style={styles.logoText}>Tamakkan</Text>
+          <AppLogo size="mini" />
         </View>
 
         <TouchableOpacity hitSlop={8} style={{ zIndex: 1 }}>
@@ -314,19 +312,6 @@ const styles = StyleSheet.create({
     gap: 8,
     pointerEvents: 'none',
   } as any,
-  logoMini: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: Colors.primary.DEFAULT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
-  },
   langToggle: {
     fontSize: 16,
     fontWeight: '700',

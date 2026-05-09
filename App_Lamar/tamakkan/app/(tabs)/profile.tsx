@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
+import AppLogo from '@/components/AppLogo';
 import { useAuthStore } from '@/stores/authStore';
 import { useSessionStore } from '@/stores/sessionStore';
 
@@ -89,10 +90,7 @@ export default function ProfileScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.logoRow}>
-          <View style={styles.logoMini}>
-            <MaterialCommunityIcons name="chip" size={18} color="#fff" />
-          </View>
-          <Text style={styles.logoText}>Tamakkan</Text>
+          <AppLogo size="mini" />
         </View>
         <Text style={styles.langToggle}>EN</Text>
       </View>
@@ -187,19 +185,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  logoMini: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: Colors.primary.DEFAULT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
   },
   langToggle: {
     fontSize: 16,

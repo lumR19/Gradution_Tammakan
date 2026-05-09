@@ -12,6 +12,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
+import AppLogo from '@/components/AppLogo';
 import { useSessionStore } from '@/stores/sessionStore';
 import { DashcamDevice } from '@/types';
 
@@ -83,10 +84,7 @@ export default function DevicesScreen() {
           >
             <MaterialCommunityIcons name="arrow-left" size={24} color={Colors.primary.container} />
           </TouchableOpacity>
-          <View style={styles.logoMini}>
-            <MaterialCommunityIcons name="chip" size={18} color="#fff" />
-          </View>
-          <Text style={styles.logoText}>Tamakkan</Text>
+          <AppLogo size="mini" />
         </View>
         <TouchableOpacity hitSlop={8}>
           <Text style={styles.langToggle}>EN</Text>
@@ -234,19 +232,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoMini: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: Colors.primary.DEFAULT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
   },
   langToggle: {
     fontSize: 16,

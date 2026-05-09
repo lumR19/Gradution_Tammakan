@@ -1,87 +1,216 @@
-import { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  Dimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
+import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '@/theme/colors';
+import AppLogo from '@/components/AppLogo';
+
+const { width } = Dimensions.get('window');
+
+type WelcomeSlide = { key: string; type: 'welcome' };
+type FeatureSlide = {
+  key: string;
+  type: 'feature';
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  gradient: readonly [string, string];
+  badgeLabel: string;
+  badgeValue: string;
+  badgeValueColor: string;
+  badgeIconBg: string;
+  badgeIconColor: string;
+  desc: string;
+};
+type Slide = WelcomeSlide | FeatureSlide;
+
+const SLIDES: Slide[] = [
+  { key: 'welcome', type: 'welcome' },
+  {
+    key: 'detect',
+    type: 'feature',
+    icon: 'eye-outline',
+    gradient: ['#003a3a', '#001c1c'],
+    badgeLabel: 'AI SAFETY',
+    badgeValue: 'Detects Dangers',
+    badgeValueColor: Colors.primary.container,
+    badgeIconBg: Colors.primary.onContainer,
+    badgeIconColor: Colors.primary.container,
+    desc: 'Spots lane departures, tailgating, and near-miss events the moment they happen.',
+  },
+  {
+    key: 'alerts',
+    type: 'feature',
+    icon: 'microphone-outline',
+    gradient: ['#002e1e', '#001209'],
+    badgeLabel: 'VOICE AI',
+    badgeValue: 'Speaks Alerts',
+    badgeValueColor: Colors.secondary.DEFAULT,
+    badgeIconBg: Colors.secondary.fixed,
+    badgeIconColor: Colors.secondary.DEFAULT,
+    desc: 'Real-time audio warnings reach you before a risk turns into an accident.',
+  },
+  {
+    key: 'tracks',
+    type: 'feature',
+    icon: 'chart-line',
+    gradient: ['#3a2800', '#1c1200'],
+    badgeLabel: 'ANALYTICS',
+    badgeValue: 'Tracks Progress',
+    badgeValueColor: Colors.tertiary.container,
+    badgeIconBg: Colors.tertiary.onContainer,
+    badgeIconColor: Colors.tertiary.DEFAULT,
+    desc: 'Every session is scored and analyzed so you improve with every drive.',
+  },
+];
 
 export default function SplashScreen() {
   const insets = useSafeAreaInsets();
+  const [index, setIndex] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const listRef = useRef<FlatList<Slide>>(null);
 
-  useEffect(() => {
-    const t = setTimeout(advance, 3000);
-    return () => clearTimeout(t);
-  }, []);
+  const isLast = index === SLIDES.length - 1;
 
-  const advance = () => router.replace('/(auth)/user-type');
+  const goNext = () => {
+    const next = index + 1;
+    listRef.current?.scrollToIndex({ index: next, animated: true });
+    setIndex(next);
+  };
 
-  return (
-    <TouchableOpacity activeOpacity={1} onPress={advance} style={styles.container}>
-      {/* Decorative glow circles */}
-      <View style={[styles.glowTL, { top: -80, left: -80 }]} />
-      <View style={[styles.glowBR, { bottom: -80, right: -80 }]} />
+  const getStarted = async () => {
+    setLoading(true);
+    try {
+      await Audio.requestPermissionsAsync();
+      await Location.requestForegroundPermissionsAsync();
+      await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+    } catch {
+      // proceed regardless
+    } finally {
+      setLoading(false);
+      router.replace('/(auth)/user-type');
+    }
+  };
 
-      {/* Main content */}
-      <View style={styles.content}>
-        {/* Logo */}
-        <View style={styles.logoWrap}>
-          <View style={styles.logoIcon}>
-            <MaterialCommunityIcons name="chip" size={40} color="#fff" />
+  const renderSlide = ({ item }: { item: Slide }) => {
+    if (item.type === 'welcome') {
+      return (
+        <View style={[styles.slide, styles.welcomeSlide, { width }]}>
+          <AppLogo size="large" />
+          <View style={styles.headingWrap}>
+            <Text style={styles.heading}>Welcome to Tamakkan</Text>
+            <Text style={styles.subtitle}>Smart Driving Assessment</Text>
           </View>
-          <Text style={styles.logoText}>Tamakkan</Text>
         </View>
+      );
+    }
 
-        {/* Heading */}
-        <View style={styles.headingWrap}>
-          <Text style={styles.heading}>Welcome to Tamakkan</Text>
-          <Text style={styles.subtitle}>Smart Driving Assessment</Text>
-        </View>
-
-        {/* Car image + floating badge */}
+    // Feature slide — same visual structure as the welcome slide
+    return (
+      <View style={[styles.slide, { width }]}>
         <View style={styles.imageWrap}>
-          {/* Dark car placeholder */}
-          <View style={styles.carImage}>
+          {/* Gradient box with large icon */}
+          <View style={styles.featureBox}>
             <LinearGradient
-              colors={['#1e2e2e', '#0a1818']}
-              style={styles.carGradient}
+              colors={item.gradient}
+              style={styles.featureGradient}
             >
               <MaterialCommunityIcons
-                name="car-side"
-                size={88}
-                color="rgba(255,255,255,0.2)"
+                name={item.icon}
+                size={110}
+                color="rgba(255,255,255,0.88)"
               />
-              <Text style={styles.safeForWork}>SAFE FOR WORK</Text>
             </LinearGradient>
           </View>
 
           {/* Floating badge */}
           <View style={styles.badge}>
-            <View style={styles.badgeIcon}>
+            <View style={[styles.badgeIconWrap, { backgroundColor: item.badgeIconBg }]}>
               <MaterialCommunityIcons
-                name="shield-star-outline"
+                name={item.icon}
                 size={20}
-                color={Colors.secondary.onContainer}
+                color={item.badgeIconColor}
               />
             </View>
             <View>
-              <Text style={styles.badgeLabel}>SAFETY SCORE</Text>
-              <Text style={styles.badgeValue}>AI Driven</Text>
+              <Text style={styles.badgeLabel}>{item.badgeLabel}</Text>
+              <Text style={[styles.badgeValue, { color: item.badgeValueColor }]}>
+                {item.badgeValue}
+              </Text>
             </View>
           </View>
         </View>
-      </View>
 
-      {/* Bottom: dots + tagline */}
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + 32 }]}>
-        <View style={styles.dots}>
-          <View style={[styles.dot, { backgroundColor: Colors.primary.container }]} />
-          <View style={[styles.dot, { backgroundColor: '#b2dfdb' }]} />
-          <View style={[styles.dot, { backgroundColor: '#e0f2f1' }]} />
-        </View>
-        <Text style={styles.tagline}>Securing your journey...</Text>
+        {/* Small explanation */}
+        <Text style={styles.featureDesc}>{item.desc}</Text>
       </View>
-    </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Decorative glow circles */}
+      <View style={[styles.glowTL, { top: -80, left: -80 }]} />
+      <View style={[styles.glowBR, { bottom: -80, right: -80 }]} />
+
+      {/* Swipeable slides — fills all available space */}
+      <FlatList
+        ref={listRef}
+        data={SLIDES}
+        keyExtractor={(item) => item.key}
+        renderItem={renderSlide}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+          setIndex(newIndex);
+        }}
+        style={styles.list}
+        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+      />
+
+      {/* Bottom: dots + button + skip */}
+      <View style={[styles.bottom, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={styles.dots}>
+          {SLIDES.map((_, i) => (
+            <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
+          ))}
+        </View>
+
+        <TouchableOpacity
+          onPress={isLast ? getStarted : goNext}
+          activeOpacity={0.85}
+          disabled={loading}
+          style={styles.btn}
+        >
+          <Text style={styles.btnText}>
+            {isLast ? (loading ? 'Setting up…' : 'Get Started') : 'Next'}
+          </Text>
+          <MaterialCommunityIcons
+            name={isLast ? 'check-circle-outline' : 'arrow-right'}
+            size={20}
+            color="#fff"
+          />
+        </TouchableOpacity>
+
+        {!isLast && (
+          <TouchableOpacity onPress={getStarted} hitSlop={12}>
+            <Text style={styles.skip}>Skip</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -90,7 +219,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   glowTL: {
     position: 'absolute',
@@ -108,34 +236,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary.fixed,
     opacity: 0.1,
   },
-  content: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    gap: 32,
+
+  // ── Slides ──
+  list: {
+    flex: 1,
   },
-  logoWrap: {
-    alignItems: 'center',
-    gap: 10,
-  },
-  logoIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: Colors.primary.DEFAULT,
+  slide: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.primary.DEFAULT,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    paddingHorizontal: 24,
+    gap: 28,
   },
-  logoText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
-    letterSpacing: 0.5,
+  welcomeSlide: {
+    gap: 20,
   },
+
+  // Welcome slide
   headingWrap: {
     alignItems: 'center',
     gap: 6,
@@ -148,31 +265,25 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    fontWeight: '400',
     color: Colors.surface.onVariant,
     textAlign: 'center',
   },
+  // Shared: image/feature box + badge
   imageWrap: {
     position: 'relative',
     marginBottom: 24,
   },
-  carImage: {
+  featureBox: {
     width: 264,
     height: 264,
     borderRadius: 32,
     overflow: 'hidden',
   },
-  carGradient: {
+  featureGradient: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-  },
-  safeForWork: {
-    color: 'rgba(255,255,255,0.15)',
-    fontSize: 8,
-    letterSpacing: 3,
-    fontWeight: '600',
   },
   badge: {
     position: 'absolute',
@@ -193,7 +304,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f0f0f0',
   },
-  badgeIcon: {
+  badgeIconWrap: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -211,27 +322,62 @@ const styles = StyleSheet.create({
   badgeValue: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.primary.container,
   },
+
+  // Feature description
+  featureDesc: {
+    fontSize: 15,
+    color: Colors.surface.onVariant,
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 8,
+  },
+
+  // ── Bottom ──
   bottom: {
-    position: 'absolute',
-    bottom: 0,
     width: '100%',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 24,
+    gap: 16,
   },
   dots: {
     flexDirection: 'row',
     gap: 8,
+    alignItems: 'center',
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
+    backgroundColor: Colors.outline.variant,
   },
-  tagline: {
+  dotActive: {
+    width: 24,
+    backgroundColor: Colors.primary.container,
+  },
+  btn: {
+    width: '100%',
+    height: 56,
+    backgroundColor: Colors.primary.container,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: Colors.primary.container,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  btnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  skip: {
     fontSize: 14,
-    color: '#94a3b8',
-    fontWeight: '400',
+    color: Colors.outline.DEFAULT,
+    fontWeight: '500',
   },
 });

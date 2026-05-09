@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
+import AppLogo from '@/components/AppLogo';
 import { useAuthStore } from '@/stores/authStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { getSessions, getStats, getDailyTip } from '@/services/api';
@@ -72,10 +73,7 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.logoRow}>
-          <View style={styles.logoMini}>
-            <MaterialCommunityIcons name="chip" size={18} color="#fff" />
-          </View>
-          <Text style={styles.logoText}>Tamakkan</Text>
+          <AppLogo size="mini" />
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity hitSlop={8}>
@@ -371,19 +369,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  logoMini: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: Colors.primary.DEFAULT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
   },
   headerRight: {
     flexDirection: 'row',
