@@ -25,7 +25,7 @@ MIN_BBOX_HEIGHT = 60
 CACHE_TTL_FRAMES = 30
 
 # EasyOCR device
-USE_GPU_FOR_OCR = False
+USE_GPU_FOR_OCR = True
 
 # =========================================================
 # PROCESS THE VIDEO
