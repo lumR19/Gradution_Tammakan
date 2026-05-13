@@ -17,13 +17,15 @@ TRAFFIC_SIGN_ID = 5
 CONF_THRESHOLD = 0.50
 OCR_EVERY_N_FRAMES = 5
 
-# --- New gating settings ---
-MIN_OCR_CONF = 0.75          # only run OCR if YOLO confidence >= 0.75
-MIN_BBOX_HEIGHT = 60         # only run OCR if sign height >= 60 px
-CACHE_TTL_FRAMES = 30        # keep last successful OCR result for 30 frames
+# Gating before OCR
+MIN_OCR_CONF = 0.75
+MIN_BBOX_HEIGHT = 60
 
-# --- EasyOCR device ---
-USE_GPU_FOR_OCR = True      # on Jetson: change to True and benchmark
+# Cache settings
+CACHE_TTL_FRAMES = 30
+
+# EasyOCR device
+USE_GPU_FOR_OCR = False
 
 # =========================================================
 # PROCESS THE VIDEO
@@ -97,19 +99,12 @@ def process_video(video_path, model, ocr_manager, output_folder):
                     region_key = f"{x1//20}_{y1//20}_{x2//20}_{y2//20}"
                     speed = ""
 
-                    # -------------------------------------------------
-                    # 1) CACHE FIRST: use cached value if still fresh
-                    # -------------------------------------------------
+                    # 1) Use cached result first if still fresh
                     cached = last_speeds.get(region_key)
                     if cached and (frame_idx - cached["last_seen"] <= CACHE_TTL_FRAMES):
                         speed = cached["speed"]
 
-                    # -------------------------------------------------
-                    # 2) GATING + OCR
-                    # Only run OCR every N frames AND only if:
-                    #   - bbox height >= 60
-                    #   - YOLO conf >= 0.75
-                    # -------------------------------------------------
+                    # 2) Only run OCR if frame skipping + size + confidence conditions pass
                     should_run_ocr = (
                         frame_idx % OCR_EVERY_N_FRAMES == 0 and
                         bbox_height >= MIN_BBOX_HEIGHT and
@@ -119,10 +114,10 @@ def process_video(video_path, model, ocr_manager, output_folder):
                     if should_run_ocr:
                         start_time = time.perf_counter()
                         detected_speed = ocr_manager.read_speed_sign(cropped_sign)
-                        ocr_elapsed = time.perf_counter() - start_time
+                        elapsed = time.perf_counter() - start_time
 
                         total_ocr_calls += 1
-                        total_ocr_time += ocr_elapsed
+                        total_ocr_time += elapsed
 
                         if detected_speed:
                             speed = detected_speed
@@ -131,13 +126,11 @@ def process_video(video_path, model, ocr_manager, output_folder):
                                 "last_seen": frame_idx
                             }
 
-                    # -------------------------------------------------
-                    # 3) Skip if no valid speed
-                    # -------------------------------------------------
+                    # 3) If still no valid speed, skip
                     if not speed:
                         continue
 
-                    # refresh cache timestamp if using cached result
+                    # Refresh cache timestamp if cached result used
                     if region_key in last_speeds:
                         last_speeds[region_key]["last_seen"] = frame_idx
 

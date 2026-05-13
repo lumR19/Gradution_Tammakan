@@ -5,7 +5,7 @@ import cv2
 import re
 
 class TamakkanOCR:
-    def __init__(self, use_gpu=True):
+    def __init__(self, use_gpu=False):
         self.reader = easyocr.Reader(['en'], gpu=use_gpu)
         self.valid_speeds = {"20", "30", "40", "50", "60", "70", "80", "90", "100", "110", "120"}
 
@@ -20,7 +20,6 @@ class TamakkanOCR:
 
         results = self.reader.readtext(thresh, detail=0)
         detected_text = " ".join(results).strip().upper()
-
         detected_text = re.sub(r'[^0-9]', '', detected_text)
 
         if detected_text in self.valid_speeds:
