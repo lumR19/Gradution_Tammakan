@@ -23,7 +23,7 @@ MIN_BBOX_HEIGHT = 60         # only run OCR if sign height >= 60 px
 CACHE_TTL_FRAMES = 30        # keep last successful OCR result for 30 frames
 
 # --- EasyOCR device ---
-USE_GPU_FOR_OCR = False      # on Jetson: change to True and benchmark
+USE_GPU_FOR_OCR = True      # on Jetson: change to True and benchmark
 
 # =========================================================
 # PROCESS THE VIDEO
