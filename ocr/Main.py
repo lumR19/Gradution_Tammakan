@@ -32,7 +32,7 @@ CACHE_TTL_FRAMES = 30
 USE_GPU_FOR_OCR  = False
 
 # ── Demo: set a fixed ego speed for offline testing (set None to disable) ──────
-DEMO_EGO_SPEED_KMH = None   # e.g. 95.0 to test without a phone
+DEMO_EGO_SPEED_KMH = 100.0   # e.g. 95.0 to test without a phone
 
 # =========================================================
 # PROCESS THE VIDEO
