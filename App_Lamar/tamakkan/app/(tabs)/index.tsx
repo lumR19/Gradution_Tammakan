@@ -1,15 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Modal,
+  StatusBar,
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Video, ResizeMode } from 'expo-av';
 import Colors from '@/theme/colors';
 import AppLogo from '@/components/AppLogo';
 import { useAuthStore } from '@/stores/authStore';
@@ -18,6 +21,17 @@ import { getSessions, getStats, getDailyTip } from '@/services/api';
 import ScoreRing from '@/components/features/ScoreRing';
 import { formatDate, formatDuration, getScoreColor } from '@/utils/formatters';
 import { DrivingSession } from '@/types';
+
+const severityColor = (s: 'low' | 'medium' | 'high') =>
+  s === 'high' ? Colors.error.DEFAULT
+  : s === 'medium' ? Colors.tertiary.DEFAULT
+  : Colors.secondary.DEFAULT;
+
+const formatMistakeTime = (sec: number) => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
 
 function SessionCard({ session }: { session: DrivingSession }) {
   const scoreColor = getScoreColor(session.score);
@@ -54,6 +68,7 @@ export default function HomeScreen() {
   } = useSessionStore();
 
   const firstName = (user?.name ?? '').split(' ')[0] || 'User';
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -64,6 +79,10 @@ export default function HomeScreen() {
 
   const lastSession = sessions[0] ?? null;
   const currentScore = stats?.currentScore ?? 4.5;
+  const totalDrives = sessions.length;
+  const totalAlerts = sessions.reduce((sum, s) => sum + s.mistakes.length, 0);
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const tipText =
     dailyTip?.content ??
     'Maintaining a 3-second gap from the car ahead reduces harsh braking by 40%.';
@@ -72,19 +91,10 @@ export default function HomeScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoRow}>
-          <AppLogo size="mini" />
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity hitSlop={8}>
-            <Text style={styles.langToggle}>EN</Text>
-          </TouchableOpacity>
-          {dashcamConnected && (
-            <View style={styles.avatar}>
-              <MaterialCommunityIcons name="account" size={22} color={Colors.primary.container} />
-            </View>
-          )}
-        </View>
+        <AppLogo size="mini" />
+        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} hitSlop={12} style={styles.avatar}>
+          <MaterialCommunityIcons name="account" size={22} color={Colors.primary.container} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -155,21 +165,21 @@ export default function HomeScreen() {
               />
             </View>
 
-            {/* Mini stat cards */}
+            {/* Stats row */}
             <View style={styles.miniCardRow}>
               <View style={styles.miniCard}>
-                <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.error.DEFAULT}22` }]}>
-                  <MaterialCommunityIcons name="alert" size={20} color={Colors.error.DEFAULT} />
+                <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.primary.container}22` }]}>
+                  <MaterialCommunityIcons name="car-multiple" size={20} color={Colors.primary.container} />
                 </View>
-                <Text style={styles.miniCardLabel}>MISTAKES</Text>
-                <Text style={styles.miniCardNum}>{stats?.totalMistakes ?? 12}</Text>
+                <Text style={styles.miniCardLabel}>TOTAL DRIVES</Text>
+                <Text style={styles.miniCardNum}>{totalDrives}</Text>
               </View>
               <View style={styles.miniCard}>
-                <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.secondary.DEFAULT}22` }]}>
-                  <MaterialCommunityIcons name="shield-check" size={20} color={Colors.secondary.DEFAULT} />
+                <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.error.DEFAULT}22` }]}>
+                  <MaterialCommunityIcons name="bell-alert-outline" size={20} color={Colors.error.DEFAULT} />
                 </View>
-                <Text style={styles.miniCardLabel}>SAFE POINTS</Text>
-                <Text style={styles.miniCardNum}>{stats?.safePoints ?? 340}</Text>
+                <Text style={styles.miniCardLabel}>TOTAL ALERTS</Text>
+                <Text style={styles.miniCardNum}>{totalAlerts}</Text>
               </View>
             </View>
 
@@ -195,9 +205,9 @@ export default function HomeScreen() {
               <View style={styles.tipGlow} />
             </View>
 
-            {/* Last Session */}
+            {/* Last Drive */}
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Last Session</Text>
+              <Text style={styles.sectionTitle}>Last Drive</Text>
               <TouchableOpacity
                 hitSlop={8}
                 onPress={() => router.push('/(tabs)/progress')}
@@ -208,8 +218,12 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {lastSession && (
-              <View style={styles.lastSessionCard}>
+            {lastSession ? (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setShowVideoModal(true)}
+                style={styles.lastSessionCard}
+              >
                 <LinearGradient
                   colors={['#1e2e2e', '#0a1818']}
                   style={StyleSheet.absoluteFillObject}
@@ -218,27 +232,46 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons name="car-side" size={64} color="rgba(255,255,255,0.08)" />
                   </View>
                 </LinearGradient>
+
+                {/* Score circle — top right */}
+                <View style={[styles.lastDriveScore, { borderColor: getScoreColor(lastSession.score) }]}>
+                  <Text style={[styles.lastDriveScoreNum, { color: getScoreColor(lastSession.score) }]}>
+                    {lastSession.score}
+                  </Text>
+                  <Text style={styles.lastDriveScorePts}>pts</Text>
+                </View>
+
+                {/* Play button — center */}
                 <View style={styles.lastSessionPlayOverlay}>
                   <View style={styles.lastSessionPlayBtn}>
                     <MaterialCommunityIcons name="play" size={28} color="#fff" />
                   </View>
                 </View>
+
+                {/* Info bar — bottom */}
                 <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.82)']}
+                  colors={['transparent', 'rgba(0,0,0,0.85)']}
                   style={styles.lastSessionInfoOverlay}
                 >
                   <View style={styles.lastSessionInfoRow}>
-                    <View>
+                    <View style={{ gap: 2 }}>
                       <Text style={styles.lastSessionTitle}>{lastSession.title}</Text>
                       <Text style={styles.lastSessionMeta}>
-                        {formatDate(lastSession.startedAt)} · {formatDuration(lastSession.durationMinutes)}
+                        {formatDate(lastSession.startedAt)} · {formatTime(lastSession.startedAt)}
                       </Text>
                     </View>
-                    <View style={styles.lastSessionBadge}>
-                      <Text style={styles.lastSessionBadgeText}>{lastSession.score} pts</Text>
+                    <View style={styles.lastDriveDuration}>
+                      <MaterialCommunityIcons name="clock-outline" size={12} color="rgba(255,255,255,0.7)" />
+                      <Text style={styles.lastDriveDurationText}>
+                        {formatDuration(lastSession.durationMinutes)}
+                      </Text>
                     </View>
                   </View>
                 </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No drives yet — start your first session!</Text>
               </View>
             )}
           </>
@@ -342,6 +375,128 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* ── Video Player Modal ── */}
+      <Modal
+        visible={showVideoModal}
+        animationType="slide"
+        onRequestClose={() => setShowVideoModal(false)}
+        statusBarTranslucent
+      >
+        <StatusBar barStyle="light-content" backgroundColor="#0a0f0f" />
+        <View style={styles.videoModal}>
+
+          {/* Fixed header */}
+          <View style={[styles.videoModalHeader, { paddingTop: insets.top + 12 }]}>
+            <TouchableOpacity onPress={() => setShowVideoModal(false)} hitSlop={12} style={styles.videoModalClose}>
+              <MaterialCommunityIcons name="close" size={22} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.videoModalTitle} numberOfLines={1}>
+              {lastSession?.title ?? 'Last Drive'}
+            </Text>
+            <View style={{ width: 38 }} />
+          </View>
+
+          {/* Scrollable: video + summary */}
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
+
+            {/* Video or placeholder */}
+            {lastSession?.videoUrl ? (
+              <Video
+                source={{ uri: lastSession.videoUrl }}
+                style={styles.videoPlayer}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+              />
+            ) : (
+              <View style={styles.videoPlaceholder}>
+                <MaterialCommunityIcons name="video-outline" size={64} color="rgba(255,255,255,0.2)" />
+                <Text style={styles.videoPlaceholderTitle}>Video Not Available Yet</Text>
+                <Text style={styles.videoPlaceholderSub}>
+                  Session recordings will appear here once the dashcam backend is connected.
+                </Text>
+              </View>
+            )}
+
+            {/* ── Session Summary ── */}
+            {lastSession && (
+              <View style={styles.summarySection}>
+
+                <Text style={styles.summaryHeading}>SESSION SUMMARY</Text>
+
+                {/* Score block */}
+                <View style={styles.summaryScoreRow}>
+                  <Text style={[styles.summaryScoreBig, { color: getScoreColor(lastSession.score) }]}>
+                    {lastSession.score}
+                  </Text>
+                  <View style={styles.summaryScoreMeta}>
+                    <Text style={styles.summaryScoreOutOf}>/100</Text>
+                    <View style={[styles.summaryScoreLabelBadge, { backgroundColor: `${getScoreColor(lastSession.score)}22` }]}>
+                      <Text style={[styles.summaryScoreLabelText, { color: getScoreColor(lastSession.score) }]}>
+                        {lastSession.scoreLabel}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Stats strip */}
+                <View style={styles.summaryStatsStrip}>
+                  <View style={styles.summaryStatItem}>
+                    <MaterialCommunityIcons name="calendar-outline" size={16} color="rgba(255,255,255,0.4)" />
+                    <Text style={styles.summaryStatLabel}>Date</Text>
+                    <Text style={styles.summaryStatValue}>{formatDate(lastSession.startedAt)}</Text>
+                  </View>
+                  <View style={styles.summaryStatDivider} />
+                  <View style={styles.summaryStatItem}>
+                    <MaterialCommunityIcons name="clock-outline" size={16} color="rgba(255,255,255,0.4)" />
+                    <Text style={styles.summaryStatLabel}>Time</Text>
+                    <Text style={styles.summaryStatValue}>{formatTime(lastSession.startedAt)}</Text>
+                  </View>
+                  <View style={styles.summaryStatDivider} />
+                  <View style={styles.summaryStatItem}>
+                    <MaterialCommunityIcons name="timer-outline" size={16} color="rgba(255,255,255,0.4)" />
+                    <Text style={styles.summaryStatLabel}>Duration</Text>
+                    <Text style={styles.summaryStatValue}>{formatDuration(lastSession.durationMinutes)}</Text>
+                  </View>
+                </View>
+
+                {/* Alerts */}
+                {lastSession.mistakes.length === 0 ? (
+                  <View style={styles.summaryNoAlerts}>
+                    <MaterialCommunityIcons name="shield-check" size={36} color={Colors.secondary.DEFAULT} />
+                    <Text style={styles.summaryNoAlertsText}>Clean drive — no alerts!</Text>
+                  </View>
+                ) : (
+                  <View style={styles.summaryAlertsList}>
+                    <View style={styles.summaryAlertsHeader}>
+                      <MaterialCommunityIcons name="bell-alert-outline" size={15} color="rgba(255,255,255,0.5)" />
+                      <Text style={styles.summaryAlertsTitle}>
+                        ALERTS  ·  {lastSession.mistakes.length}
+                      </Text>
+                    </View>
+                    {lastSession.mistakes.map((m) => (
+                      <View key={m.id} style={styles.summaryAlertRow}>
+                        <View style={[styles.summaryAlertAccent, { backgroundColor: severityColor(m.severity) }]} />
+                        <View style={styles.summaryAlertBody}>
+                          <Text style={styles.summaryAlertLabel}>{m.label}</Text>
+                          <Text style={styles.summaryAlertTime}>at {formatMistakeTime(m.timestamp)} min</Text>
+                        </View>
+                        <View style={[styles.summaryAlertSeverity, { backgroundColor: `${severityColor(m.severity)}20` }]}>
+                          <Text style={[styles.summaryAlertSeverityText, { color: severityColor(m.severity) }]}>
+                            {m.severity.toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -356,7 +511,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingLeft: 1,
+    paddingRight: 16,
     height: 60,
     backgroundColor: '#ffffff',
     shadowColor: Colors.primary.tint,
@@ -364,21 +520,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 20,
     elevation: 3,
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  langToggle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
   },
   avatar: {
     width: 38,
@@ -646,17 +787,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
     marginTop: 2,
   },
-  lastSessionBadge: {
-    backgroundColor: Colors.primary.DEFAULT,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  lastSessionBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fff',
-  },
   // ── PRE-CONNECT: DashCam card ──
   dashcamCard: {
     backgroundColor: Colors.surface.containerLowest,
@@ -886,5 +1016,225 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 14,
     color: Colors.outline.DEFAULT,
+  },
+  // ── Last Drive enhancements ──
+  lastDriveScore: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  lastDriveScoreNum: {
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 19,
+  },
+  lastDriveScorePts: {
+    fontSize: 8,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  lastDriveDuration: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  lastDriveDurationText: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '500',
+  },
+  // ── Video Modal ──
+  videoModal: {
+    flex: 1,
+    backgroundColor: '#0a0f0f',
+  },
+  videoModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  videoModalClose: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoModalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  videoPlayer: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#000',
+  },
+  videoPlaceholder: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#111820',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 32,
+  },
+  videoPlaceholderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+  },
+  videoPlaceholderSub: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.25)',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  // ── Session Summary ──
+  summarySection: {
+    padding: 20,
+    gap: 20,
+  },
+  summaryHeading: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 1.2,
+  },
+  summaryScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  summaryScoreBig: {
+    fontSize: 64,
+    fontWeight: '700',
+    lineHeight: 68,
+  },
+  summaryScoreMeta: {
+    gap: 6,
+    paddingBottom: 6,
+  },
+  summaryScoreOutOf: {
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.35)',
+    fontWeight: '500',
+  },
+  summaryScoreLabelBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+  },
+  summaryScoreLabelText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  summaryStatsStrip: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    paddingVertical: 16,
+  },
+  summaryStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  summaryStatDivider: {
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginVertical: 4,
+  },
+  summaryStatLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '500',
+  },
+  summaryStatValue: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  summaryNoAlerts: {
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 24,
+    backgroundColor: `${Colors.secondary.DEFAULT}12`,
+    borderRadius: 16,
+  },
+  summaryNoAlertsText: {
+    fontSize: 15,
+    color: Colors.secondary.DEFAULT,
+    fontWeight: '600',
+  },
+  summaryAlertsList: {
+    gap: 10,
+  },
+  summaryAlertsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  summaryAlertsTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 1,
+  },
+  summaryAlertRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    overflow: 'hidden',
+    gap: 12,
+  },
+  summaryAlertAccent: {
+    width: 4,
+    alignSelf: 'stretch',
+  },
+  summaryAlertBody: {
+    flex: 1,
+    paddingVertical: 12,
+    gap: 2,
+  },
+  summaryAlertLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  summaryAlertTime: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+  },
+  summaryAlertSeverity: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginRight: 12,
+  },
+  summaryAlertSeverityText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

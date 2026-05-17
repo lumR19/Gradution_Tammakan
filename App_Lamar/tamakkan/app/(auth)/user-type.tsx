@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,7 +85,17 @@ export default function UserTypeScreen() {
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.contactBtn}
-            onPress={() => Alert.alert('Contact Us', 'Support coming soon.')}
+            onPress={() =>
+              Alert.alert(
+                'Contact Us',
+                'Phone: 0555779488\nEmail: Tamakkan.contact@gmail.com',
+                [
+                  { text: 'Call', onPress: () => Linking.openURL('tel:0555779488') },
+                  { text: 'Email', onPress: () => Linking.openURL('mailto:Tamakkan.contact@gmail.com') },
+                  { text: 'Close', style: 'cancel' },
+                ]
+              )
+            }
           >
             <MaterialCommunityIcons name="headset" size={18} color={Colors.primary.DEFAULT} />
             <Text style={styles.contactText}>CONTACT US</Text>
@@ -122,7 +132,7 @@ export default function UserTypeScreen() {
             onPress={handleIndividual}
           />
           <RoleCard
-            icon="school"
+            icon="card-account-details-outline"
             iconBg="rgba(0,108,79,0.12)"
             iconColor={Colors.secondary.DEFAULT}
             title="Trainee"
@@ -141,12 +151,6 @@ export default function UserTypeScreen() {
           />
         </View>
 
-        {/* Pagination dots */}
-        <View style={styles.dots}>
-          <View style={[styles.dot, { backgroundColor: Colors.primary.container }]} />
-          <View style={[styles.dot, { backgroundColor: Colors.outline.variant }]} />
-          <View style={[styles.dot, { backgroundColor: Colors.outline.variant }]} />
-        </View>
       </ScrollView>
 
       {/* Background accent */}

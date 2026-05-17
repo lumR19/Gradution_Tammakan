@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   User,
   DrivingSession,
@@ -136,7 +137,16 @@ export async function login(nationalId: string, password: string): Promise<AuthR
   } catch {
     await delay(800);
     if (nationalId.length === 10 && password.length >= 6) {
-      return { user: MOCK_USER, token: 'mock_token_' + Date.now() };
+      try {
+        const userJson = await AsyncStorage.getItem('mock_registered_user');
+        if (userJson) {
+          const registered: User = JSON.parse(userJson);
+          if (registered.nationalId === nationalId) {
+            return { user: registered, token: 'mock_jwt_' + Date.now() };
+          }
+        }
+      } catch {}
+      return { user: MOCK_USER, token: 'mock_jwt_' + Date.now() };
     }
     throw new Error('Invalid ID or password');
   }

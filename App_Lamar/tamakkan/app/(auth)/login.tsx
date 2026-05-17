@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Linking,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
@@ -67,9 +68,28 @@ export default function LoginScreen() {
           <AppLogo size="mini" />
         </View>
 
-        <TouchableOpacity hitSlop={8} style={{ zIndex: 1 }}>
-          <Text style={styles.langToggle}>EN</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.contactBtn}
+            onPress={() =>
+              Alert.alert(
+                'Contact Us',
+                'Phone: 0555779488\nEmail: Tamakkan.contact@gmail.com',
+                [
+                  { text: 'Call', onPress: () => Linking.openURL('tel:0555779488') },
+                  { text: 'Email', onPress: () => Linking.openURL('mailto:Tamakkan.contact@gmail.com') },
+                  { text: 'Close', style: 'cancel' },
+                ]
+              )
+            }
+          >
+            <MaterialCommunityIcons name="headset" size={18} color={Colors.primary.DEFAULT} />
+            <Text style={styles.contactText}>CONTACT US</Text>
+          </TouchableOpacity>
+          <TouchableOpacity hitSlop={8}>
+            <Text style={styles.langToggle}>EN</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -88,7 +108,7 @@ export default function LoginScreen() {
           {/* Hero icon */}
           <View style={styles.hero}>
             <View style={styles.heroIcon}>
-              <MaterialCommunityIcons name="car-brake-alert" size={48} color="#fff" />
+              <MaterialCommunityIcons name="account" size={48} color="#fff" />
             </View>
             <Text style={styles.heroTitle}>Welcome Back</Text>
             <Text style={styles.heroSub}>Log in to track your driving excellence.</Text>
@@ -521,5 +541,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary.container,
     opacity: 0.15,
     zIndex: -1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 1,
+  },
+  contactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  contactText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Colors.primary.DEFAULT,
+    letterSpacing: 0.5,
   },
 });

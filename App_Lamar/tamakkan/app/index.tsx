@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Easing, Image } from 'react-native';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/stores/authStore';
 import Colors from '@/theme/colors';
 
@@ -41,13 +40,9 @@ export default function Index() {
   }, []);
 
   const navigate = async () => {
+    await useAuthStore.getState().initialize();
     const isAuthenticated = useAuthStore.getState().isAuthenticated;
-    if (isAuthenticated) {
-      router.replace('/(tabs)');
-      return;
-    }
-    const seen = await AsyncStorage.getItem('hasSeenOnboarding');
-    router.replace(seen ? '/(auth)/user-type' : '/(auth)/splash');
+    router.replace(isAuthenticated ? '/(tabs)' : '/(auth)/splash');
   };
 
   return (

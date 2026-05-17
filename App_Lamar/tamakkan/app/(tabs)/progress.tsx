@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
@@ -11,10 +12,10 @@ export default function ProgressScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoRow}>
-          <AppLogo size="mini" />
-        </View>
-        <Text style={styles.langToggle}>EN</Text>
+        <AppLogo size="mini" />
+        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} hitSlop={12} style={styles.profileBtn}>
+          <MaterialCommunityIcons name="account" size={22} color={Colors.primary.container} />
+        </TouchableOpacity>
       </View>
 
       {/* Coming soon body */}
@@ -48,7 +49,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingLeft: 1,
+    paddingRight: 16,
     height: 60,
     backgroundColor: '#fff',
     shadowColor: Colors.primary.tint,
@@ -56,16 +58,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 20,
     elevation: 3,
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  langToggle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
   },
   body: {
     flex: 1,
@@ -108,5 +100,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.primary.DEFAULT,
+  },
+  profileBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: `${Colors.primary.container}22`,
+    borderWidth: 2,
+    borderColor: Colors.primary.container,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

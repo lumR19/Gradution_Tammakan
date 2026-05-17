@@ -40,7 +40,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Tamakkan uses your location to track driving sessions."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

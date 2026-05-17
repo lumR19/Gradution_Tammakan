@@ -12,7 +12,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
-import AppLogo from '@/components/AppLogo';
 import { useSessionStore } from '@/stores/sessionStore';
 import { DashcamDevice } from '@/types';
 
@@ -84,11 +83,7 @@ export default function DevicesScreen() {
           >
             <MaterialCommunityIcons name="arrow-left" size={24} color={Colors.primary.container} />
           </TouchableOpacity>
-          <AppLogo size="mini" />
         </View>
-        <TouchableOpacity hitSlop={8}>
-          <Text style={styles.langToggle}>EN</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -212,7 +207,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     height: 60,
     backgroundColor: '#fff',
     shadowColor: Colors.primary.tint,
@@ -224,7 +219,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 16,
   },
   backBtn: {
     width: 40,
@@ -232,12 +227,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  langToggle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
-    paddingHorizontal: 4,
   },
   // ── Scroll ──
   scroll: {

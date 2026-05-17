@@ -7,6 +7,8 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Linking,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
@@ -16,11 +18,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import AppLogo from '@/components/AppLogo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/stores/authStore';
 import { validateSaudiId, validateSaudiPhone } from '@/utils/validators';
 import { User } from '@/types';
 
-type ActiveTab = 'trainee' | 'instructor';
+const formatDob = (raw: string) => {
+  const d = raw.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+};
 
 type FieldKey =
   | 'firstName'
@@ -33,9 +41,6 @@ type FieldKey =
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
-  const storeLogin = useAuthStore((s) => s.login);
-
-  const [activeTab, setActiveTab] = useState<ActiveTab>('trainee');
   const [focused, setFocused] = useState<FieldKey | null>(null);
   const [showPass, setShowPass] = useState(false);
   const [agreed, setAgreed] = useState(false);
@@ -63,7 +68,7 @@ export default function SignUpScreen() {
       setError('Please enter a valid 10-digit Saudi ID (starts with 1 or 2).');
       return;
     }
-    if (phone.length > 0 && !validateSaudiPhone(phone)) {
+    if (phone.length > 0 && !validateSaudiPhone('+966' + phone)) {
       setError('Please enter a valid Saudi phone number.');
       return;
     }
@@ -87,8 +92,12 @@ export default function SignUpScreen() {
         userType: 'individual',
         joinedAt: new Date().toISOString(),
       };
-      storeLogin(mockUser, 'mock_token_' + Date.now());
-      router.replace('/(tabs)');
+      await AsyncStorage.setItem('mock_registered_user', JSON.stringify(mockUser));
+      Alert.alert(
+        'Account Created!',
+        'Your account has been created successfully. Please log in to continue.',
+        [{ text: 'Log In', onPress: () => router.replace('/(auth)/login') }]
+      );
     } catch {
       setError('Sign-up failed. Please try again.');
     } finally {
@@ -108,9 +117,28 @@ export default function SignUpScreen() {
           <AppLogo size="mini" />
         </View>
 
-        <TouchableOpacity hitSlop={8} style={{ zIndex: 1 }}>
-          <Text style={styles.langToggle}>AR</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.contactBtn}
+            onPress={() =>
+              Alert.alert(
+                'Contact Us',
+                'Phone: 0555779488\nEmail: Tamakkan.contact@gmail.com',
+                [
+                  { text: 'Call', onPress: () => Linking.openURL('tel:0555779488') },
+                  { text: 'Email', onPress: () => Linking.openURL('mailto:Tamakkan.contact@gmail.com') },
+                  { text: 'Close', style: 'cancel' },
+                ]
+              )
+            }
+          >
+            <MaterialCommunityIcons name="headset" size={18} color={Colors.primary.DEFAULT} />
+            <Text style={styles.contactText}>CONTACT US</Text>
+          </TouchableOpacity>
+          <TouchableOpacity hitSlop={8}>
+            <Text style={styles.langToggle}>EN</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -143,46 +171,6 @@ export default function SignUpScreen() {
             <View style={styles.activeTab}>
               <Text style={styles.activeTabText}>Sign Up</Text>
             </View>
-          </View>
-
-          {/* Role tabs: Trainee / Instructor */}
-          <View style={styles.roleTabs}>
-            <TouchableOpacity
-              style={[styles.roleTab, activeTab === 'trainee' && styles.roleTabActive]}
-              onPress={() => setActiveTab('trainee')}
-            >
-              <MaterialCommunityIcons
-                name="school"
-                size={16}
-                color={activeTab === 'trainee' ? Colors.primary.container : Colors.outline.DEFAULT}
-              />
-              <Text
-                style={[
-                  styles.roleTabText,
-                  activeTab === 'trainee' && styles.roleTabTextActive,
-                ]}
-              >
-                Trainee
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.roleTab, activeTab === 'instructor' && styles.roleTabActive]}
-              onPress={() => setActiveTab('instructor')}
-            >
-              <MaterialCommunityIcons
-                name="account-tie"
-                size={16}
-                color={activeTab === 'instructor' ? Colors.primary.container : Colors.outline.DEFAULT}
-              />
-              <Text
-                style={[
-                  styles.roleTabText,
-                  activeTab === 'instructor' && styles.roleTabTextActive,
-                ]}
-              >
-                Instructor
-              </Text>
-            </TouchableOpacity>
           </View>
 
           {/* First Name + Last Name row */}
@@ -311,10 +299,11 @@ export default function SignUpScreen() {
               <TextInput
                 style={styles.input}
                 value={dob}
-                onChangeText={(t) => { setDob(t); setError(''); }}
-                placeholder="DD / MM / YYYY"
+                onChangeText={(t) => { setDob(formatDob(t)); setError(''); }}
+                placeholder="DD/MM/YYYY"
                 placeholderTextColor={Colors.outline.variant}
                 keyboardType="number-pad"
+                maxLength={10}
                 onFocus={() => setFocused('dob')}
                 onBlur={() => setFocused(null)}
                 returnKeyType="next"
@@ -518,35 +507,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: Colors.surface.onVariant,
   },
-  roleTabs: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  roleTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.outline.variant,
-    backgroundColor: Colors.surface.containerHighest,
-  },
-  roleTabActive: {
-    borderColor: Colors.primary.container,
-    backgroundColor: `${Colors.primary.container}14`,
-  },
-  roleTabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.outline.DEFAULT,
-  },
-  roleTabTextActive: {
-    color: Colors.primary.container,
-    fontWeight: '600',
-  },
   nameRow: {
     flexDirection: 'row',
     gap: 12,
@@ -687,5 +647,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary.container,
     opacity: 0.15,
     zIndex: -1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 1,
+  },
+  contactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  contactText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Colors.primary.DEFAULT,
+    letterSpacing: 0.5,
   },
 });
