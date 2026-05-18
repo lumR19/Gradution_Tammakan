@@ -52,6 +52,7 @@ const MOCK_SESSIONS: DrivingSession[] = [
     score: 92,
     scoreLabel: 'EXCELLENT',
     mistakes: [],
+    videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
   },
   {
     id: 's_002',
@@ -66,6 +67,7 @@ const MOCK_SESSIONS: DrivingSession[] = [
       { id: 'm_001', type: 'harsh_braking', label: 'Harsh Braking', timestamp: 300, severity: 'medium' },
       { id: 'm_002', type: 'speeding', label: 'Speeding', timestamp: 900, severity: 'low' },
     ],
+    videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
   },
   {
     id: 's_142',

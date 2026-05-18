@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import AppLogo from '@/components/AppLogo';
 import { useAuthStore } from '@/stores/authStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { getTrips } from '@/services/api';
 import { getTripCache, saveTripCache } from '@/utils/tripCache';
 import { DrivingSession } from '@/types';
@@ -21,11 +22,127 @@ import { formatDate, formatDuration, getScoreColor } from '@/utils/formatters';
 
 const PAGE_SIZE = 10;
 
+// ── Stats helpers ──────────────────────────────────────────────────────────────
+
+type TripStats = {
+  totalTrips: number;
+  avgScore: number;
+  totalEvents: number;
+  totalMinutes: number;
+  topAlertLabel: string | null;
+  topAlertCount: number;
+};
+
+function computeStats(trips: DrivingSession[]): TripStats | null {
+  if (trips.length === 0) return null;
+  const totalEvents = trips.reduce((s, t) => s + t.mistakes.length, 0);
+  const avgScore = Math.round(trips.reduce((s, t) => s + t.score, 0) / trips.length);
+  const totalMinutes = trips.reduce((s, t) => s + t.durationMinutes, 0);
+  const typeCounts: Record<string, { count: number; label: string }> = {};
+  trips.forEach((t) =>
+    t.mistakes.forEach((m) => {
+      if (!typeCounts[m.type]) typeCounts[m.type] = { count: 0, label: m.label };
+      typeCounts[m.type].count++;
+    }),
+  );
+  const top = Object.values(typeCounts).sort((a, b) => b.count - a.count)[0];
+  return {
+    totalTrips: trips.length,
+    avgScore,
+    totalEvents,
+    totalMinutes,
+    topAlertLabel: top?.label ?? null,
+    topAlertCount: top?.count ?? 0,
+  };
+}
+
+function StatCell({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.statCell}>
+      <MaterialCommunityIcons name={icon} size={20} color={color} />
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function StatsCard({ stats }: { stats: TripStats }) {
+  const avgColor = getScoreColor(stats.avgScore);
+  return (
+    <View style={styles.statsCard}>
+      <Text style={styles.statsCardTitle}>Overview</Text>
+      <View style={styles.statsRow}>
+        <StatCell
+          icon="car-multiple"
+          label="Trips"
+          value={String(stats.totalTrips)}
+          color={Colors.primary.DEFAULT}
+        />
+        <View style={styles.statsVDivider} />
+        <StatCell
+          icon="star-circle-outline"
+          label="Avg Score"
+          value={`${(stats.avgScore / 20).toFixed(1)}/5`}
+          color={avgColor}
+        />
+        <View style={styles.statsVDivider} />
+        <StatCell
+          icon="clock-time-four-outline"
+          label="Drive Time"
+          value={formatDuration(stats.totalMinutes)}
+          color={Colors.secondary.DEFAULT}
+        />
+        <View style={styles.statsVDivider} />
+        <StatCell
+          icon="alert-outline"
+          label="Events"
+          value={String(stats.totalEvents)}
+          color={stats.totalEvents > 0 ? Colors.tertiary.DEFAULT : Colors.secondary.DEFAULT}
+        />
+      </View>
+
+      {stats.topAlertLabel && (
+        <>
+          <View style={styles.statsHDivider} />
+          <View style={styles.topAlertRow}>
+            <View style={styles.topAlertIconWrap}>
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                size={18}
+                color={Colors.tertiary.DEFAULT}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.topAlertCaption}>Most Frequent Alert</Text>
+              <Text style={styles.topAlertLabel}>{stats.topAlertLabel}</Text>
+            </View>
+            <View style={styles.topAlertBadge}>
+              <Text style={styles.topAlertCount}>{stats.topAlertCount}×</Text>
+            </View>
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
 function ScoreBadge({ score }: { score: number }) {
   const color = getScoreColor(score);
+  const display = (score / 20).toFixed(1);
   return (
     <View style={[styles.scoreBadge, { borderColor: color, backgroundColor: `${color}18` }]}>
-      <Text style={[styles.scoreNum, { color }]}>{score}</Text>
+      <Text style={[styles.scoreNum, { color }]}>{display}</Text>
+      <Text style={[styles.scoreMax, { color }]}>/5</Text>
     </View>
   );
 }
@@ -36,7 +153,7 @@ function TripCard({ session, onPress }: { session: DrivingSession; onPress: () =
     <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={styles.cardWrap}>
       <View style={[styles.card, { borderLeftColor: accentColor }]}>
         <View style={styles.cardIconWrap}>
-          <MaterialCommunityIcons name="car-outline" size={22} color={Colors.primary.DEFAULT} />
+          <MaterialCommunityIcons name="video-outline" size={22} color={Colors.primary.DEFAULT} />
         </View>
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle} numberOfLines={1}>{session.title}</Text>
@@ -81,9 +198,11 @@ function EmptyState() {
 export default function ProgressScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
-  const userId = user?.id ?? '';
+  const userId = user?.id ?? 'u_001';
+  const setSessions = useSessionStore((s) => s.setSessions);
 
   const [trips, setTrips] = useState<DrivingSession[]>([]);
+  const stats = useMemo(() => computeStats(trips), [trips]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -93,12 +212,15 @@ export default function ProgressScreen() {
 
   const loadFromCache = useCallback(async () => {
     const cached = await getTripCache(userId);
-    if (cached.length > 0) setTrips(cached);
-  }, [userId]);
+    if (cached.length > 0) {
+      setTrips(cached);
+      setSessions(cached);
+    }
+  }, [userId, setSessions]);
 
   const fetchPage = useCallback(
     async (page: number, append = false) => {
-      if (!userId || fetchingRef.current) return;
+      if (fetchingRef.current) return;
       fetchingRef.current = true;
       try {
         const { trips: fresh, hasMore: more } = await getTrips(userId, page, PAGE_SIZE);
@@ -106,6 +228,7 @@ export default function ProgressScreen() {
         setTrips((prev) => {
           const next = append ? [...prev, ...fresh] : fresh;
           saveTripCache(userId, next);
+          setSessions(next);
           return next;
         });
         pageRef.current = page;
@@ -179,6 +302,7 @@ export default function ProgressScreen() {
           }
           onEndReached={onLoadMore}
           onEndReachedThreshold={0.3}
+          ListHeaderComponent={stats ? <StatsCard stats={stats} /> : null}
           ListEmptyComponent={<EmptyState />}
           ListFooterComponent={
             loadingMore ? (
@@ -328,6 +452,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  scoreMax: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: -1,
+  },
   // ── Empty state ──
   emptyWrap: {
     flex: 1,
@@ -356,5 +485,96 @@ const styles = StyleSheet.create({
     color: Colors.outline.DEFAULT,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  // ── Stats card ──
+  statsCard: {
+    backgroundColor: Colors.surface.containerLowest,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+    marginBottom: 6,
+    shadowColor: Colors.primary.tint,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  statsCardTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.outline.DEFAULT,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: Colors.outline.DEFAULT,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  statsVDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: Colors.surface.containerHigh,
+  },
+  statsHDivider: {
+    height: 1,
+    backgroundColor: Colors.surface.containerHigh,
+    marginTop: 14,
+    marginBottom: 12,
+  },
+  // ── Top alert row ──
+  topAlertRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  topAlertIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: `${Colors.tertiary.DEFAULT}18`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  topAlertCaption: {
+    fontSize: 11,
+    color: Colors.outline.DEFAULT,
+    fontWeight: '500',
+  },
+  topAlertLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.surface.on,
+    marginTop: 1,
+  },
+  topAlertBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: `${Colors.tertiary.DEFAULT}18`,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: `${Colors.tertiary.DEFAULT}40`,
+  },
+  topAlertCount: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.tertiary.DEFAULT,
   },
 });
