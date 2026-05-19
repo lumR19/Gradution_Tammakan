@@ -18,6 +18,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="wifi-connection" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="session" options={{ animation: 'slide_from_bottom' }} />
         </Stack>
       </SafeAreaProvider>

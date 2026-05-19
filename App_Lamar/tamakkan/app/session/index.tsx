@@ -6,7 +6,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Alert,
+  Easing,
+  Modal,
+  PanResponder,
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -14,11 +16,26 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Speech from 'expo-speech';
+import { endTrip } from '@/services/api';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useAuthStore } from '@/stores/authStore';
+import { getScoreLabel } from '@/utils/formatters';
+import { DrivingSession, MistakeType } from '@/types';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-type AlertSeverity = 'danger' | 'warning' | 'safe';
+// ─── WebSocket ────────────────────────────────────────────────────────────────
+// Replace with actual Jetson device IP and port when backend is ready.
+const WS_URL = 'ws://192.168.1.100:8765';
+
+interface JetsonEvent {
+  type: 'alert';
+  message: string;       // e.g. "Lane departure warning"
+  severity: 'danger' | 'warning';
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+type AlertSeverity = 'danger' | 'warning';
 
 interface AlertEntry {
   id: string;
@@ -27,56 +44,190 @@ interface AlertEntry {
   timestamp: number;
 }
 
-// ─── Mock data ───────────────────────────────────────────────────────────────
+// ─── Mock alerts — danger & warning only ─────────────────────────────────────
 const MOCK_ALERTS: { message: string; severity: AlertSeverity }[] = [
   { message: 'Harsh braking detected', severity: 'danger' },
   { message: 'Lane departure warning', severity: 'warning' },
   { message: 'Following distance too close', severity: 'danger' },
-  { message: 'Good lane keeping — 3 sec gap maintained', severity: 'safe' },
   { message: 'Speed limit exceeded in zone', severity: 'warning' },
-  { message: 'Safe driving — keep it up!', severity: 'safe' },
   { message: 'Sudden acceleration detected', severity: 'warning' },
   { message: 'Possible drowsiness detected', severity: 'danger' },
-  { message: 'Smooth braking — well done', severity: 'safe' },
 ];
 
 const MOCK_SPEEDS = [60, 80, 80, 120, 60];
 const HUD_HEIGHT = 52;
-const BANNER_H = 56;
+const BANNER_H = 64;
+const DASH_CYCLE = 80; // dash height + gap
+const N_DASHES = 8;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function severityFg(s: AlertSeverity): string {
-  // bright enough to be readable on the dark panel
-  if (s === 'danger') return Colors.error.container;          // '#ffdad6' light red
-  if (s === 'warning') return Colors.tertiary.fixedDim;       // '#ffba25' amber
-  return Colors.secondary.fixedDim;                           // '#62dcaf' teal-green
+function severityFg(s: AlertSeverity) {
+  return s === 'danger' ? Colors.error.container : Colors.tertiary.fixedDim;
 }
-
-function severityAccent(s: AlertSeverity): string {
-  if (s === 'danger') return Colors.error.DEFAULT;
-  if (s === 'warning') return Colors.tertiary.DEFAULT;
-  return Colors.secondary.DEFAULT;
+function severityAccent(s: AlertSeverity) {
+  return s === 'danger' ? Colors.error.DEFAULT : Colors.tertiary.DEFAULT;
 }
-
-function scoreColor(score: number): string {
-  if (score >= 4.0) return Colors.primary.DEFAULT;
-  if (score >= 3.0) return Colors.tertiary.DEFAULT;
+function scoreColor(v: number) {
+  if (v >= 4.0) return Colors.primary.DEFAULT;
+  if (v >= 3.0) return Colors.tertiary.DEFAULT;
   return Colors.error.DEFAULT;
 }
-
-function pad2(n: number): string {
-  return n.toString().padStart(2, '0');
-}
-
-function formatTime(secs: number): string {
+function pad2(n: number) { return n.toString().padStart(2, '0'); }
+function formatTime(secs: number) {
   return `${pad2(Math.floor(secs / 60))}:${pad2(secs % 60)}`;
 }
+
+const ALERT_TYPE_MAP: [string, MistakeType][] = [
+  ['braking', 'harsh_braking'],
+  ['acceleration', 'harsh_acceleration'],
+  ['lane', 'lane_departure'],
+  ['speed', 'speeding'],
+  ['distance', 'tailgating'],
+  ['drowsiness', 'drowsiness'],
+];
+function alertType(msg: string): MistakeType {
+  for (const [k, v] of ALERT_TYPE_MAP) {
+    if (msg.toLowerCase().includes(k)) return v;
+  }
+  return 'harsh_braking';
+}
+
+// ─── Top-down car (realistic sedan) ──────────────────────────────────────────
+function TopDownCar() {
+  return (
+    <View style={tdCar.wrapper}>
+      {/* Shadow under body */}
+      <View style={tdCar.shadow} />
+
+      {/* Front-left / front-right wheels */}
+      <View style={[tdCar.wheel, { top: 18, left: 0 }]} />
+      <View style={[tdCar.wheel, { top: 18, right: 0 }]} />
+      {/* Rear-left / rear-right wheels */}
+      <View style={[tdCar.wheel, { bottom: 18, left: 0 }]} />
+      <View style={[tdCar.wheel, { bottom: 18, right: 0 }]} />
+
+      {/* Car body */}
+      <View style={tdCar.body}>
+        {/* Front bumper */}
+        <View style={tdCar.bumper} />
+        {/* Headlights */}
+        <View style={tdCar.frontLights}>
+          <View style={tdCar.headlight} />
+          <View style={tdCar.headlight} />
+        </View>
+        {/* Hood */}
+        <View style={tdCar.hood} />
+        {/* Windshield */}
+        <View style={tdCar.windshield} />
+        {/* Cabin — narrowed with side margins to show roofline */}
+        <View style={tdCar.cabin} />
+        {/* Rear window */}
+        <View style={tdCar.rearWindow} />
+        {/* Trunk */}
+        <View style={tdCar.trunk} />
+        {/* Tail lights */}
+        <View style={tdCar.rearLights}>
+          <View style={tdCar.taillight} />
+          <View style={tdCar.taillight} />
+        </View>
+        {/* Rear bumper */}
+        <View style={tdCar.bumper} />
+      </View>
+    </View>
+  );
+}
+
+const CAR_W = 44;   // body width
+const WRAP_W = 60;  // wrapper (body + wheels)
+
+const tdCar = StyleSheet.create({
+  wrapper: {
+    width: WRAP_W,
+    height: 106,
+    position: 'relative',
+    alignItems: 'center',
+  },
+  shadow: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    top: 4,
+    bottom: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  wheel: {
+    position: 'absolute',
+    width: 10,
+    height: 22,
+    backgroundColor: '#111',
+    borderRadius: 3,
+  },
+  body: {
+    width: CAR_W,
+    height: 106,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#cacaca',
+  },
+  bumper:     { height: 5, backgroundColor: '#999' },
+  frontLights: {
+    height: 5,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    backgroundColor: '#b5b5b5',
+    alignItems: 'center',
+  },
+  headlight: {
+    width: 8,
+    height: 3,
+    backgroundColor: 'rgba(255,252,180,0.95)',
+    borderRadius: 2,
+  },
+  rearLights: {
+    height: 5,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    backgroundColor: '#b5b5b5',
+    alignItems: 'center',
+  },
+  taillight: {
+    width: 8,
+    height: 3,
+    backgroundColor: 'rgba(255,30,30,0.95)',
+    borderRadius: 2,
+  },
+  hood: { height: 16, backgroundColor: '#d4d4d4' },
+  windshield: {
+    height: 14,
+    backgroundColor: 'rgba(140,205,235,0.72)',
+    marginHorizontal: 3,
+    borderRadius: 3,
+  },
+  cabin: {
+    height: 22,
+    backgroundColor: '#2e2e2e',
+    marginHorizontal: 5,
+    borderRadius: 2,
+  },
+  rearWindow: {
+    height: 12,
+    backgroundColor: 'rgba(140,205,235,0.62)',
+    marginHorizontal: 3,
+    borderRadius: 3,
+  },
+  trunk: { height: 16, backgroundColor: '#d4d4d4' },
+});
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function LiveSessionScreen() {
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
-  const stopSession = useSessionStore((s) => s.stopSession);
+  const stopSession      = useSessionStore((s) => s.stopSession);
+  const activeSessionId  = useSessionStore((s) => s.activeSessionId);
+  const user = useAuthStore((s) => s.user);
 
   // ── State ──
   const elapsedRef = useRef(0);
@@ -85,30 +236,86 @@ export default function LiveSessionScreen() {
   const [alertLog, setAlertLog] = useState<AlertEntry[]>([]);
   const [bannerAlert, setBannerAlert] = useState<AlertEntry | null>(null);
   const [detectedSpeed, setDetectedSpeed] = useState(60);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [showSummary, setShowSummary] = useState(false);
+  const [finalScore, setFinalScore] = useState(4.2);
+  const [finalElapsed, setFinalElapsed] = useState(0);
+
+  // ── Layout constants (needed before refs for Animated.Value init) ──
+  const availH     = screenH - insets.top - insets.bottom - HUD_HEIGHT;
+  const initPanelH = Math.round(availH * 0.48 + 16);
+  const MIN_PANEL_H = 80;
 
   // ── Animations ──
-  const recPulse = useRef(new Animated.Value(1)).current;
-  const bannerY = useRef(new Animated.Value(-BANNER_H)).current;
-  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recPulse    = useRef(new Animated.Value(1)).current;
+  const bannerY     = useRef(new Animated.Value(-BANNER_H - 8)).current;
+  const roadAnim    = useRef(new Animated.Value(0)).current;
+  const panelHeight = useRef(new Animated.Value(initPanelH)).current;
+  const bannerTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bannerVisibleRef = useRef(false);
+  const wsRef            = useRef<WebSocket | null>(null);
+  const voiceEnabledRef  = useRef(true);
+  const sessionActiveRef = useRef(true);   // flipped to false the moment STOP is pressed
+
+  // ── Panel drag (height-based — shrinks downward, no gap ever) ──
+  const panDragStart   = useRef(initPanelH);
+  const panelHeightVal = useRef(initPanelH);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  (_, { dy }) => Math.abs(dy) > 4,
+      onPanResponderGrant: () => {
+        panelHeight.stopAnimation();
+        panDragStart.current = panelHeightVal.current;
+      },
+      onPanResponderMove: (_, { dy }) => {
+        const next = Math.max(MIN_PANEL_H, Math.min(panDragStart.current - dy, initPanelH));
+        panelHeight.setValue(next);
+        panelHeightVal.current = next;
+      },
+      onPanResponderRelease: (_, { vy }) => {
+        const curr = panelHeightVal.current;
+        const collapse = curr < initPanelH * 0.6 || vy > 0.5;
+        const target = collapse ? MIN_PANEL_H : initPanelH;
+        panelHeightVal.current = target;
+        panDragStart.current   = target;
+        Animated.spring(panelHeight, {
+          toValue: target,
+          useNativeDriver: false, // height animation needs this
+          speed: 18,
+          bounciness: 4,
+        }).start();
+      },
+    }),
+  ).current;
 
   // ── Refs for cycling ──
   const alertIndexRef = useRef(0);
   const speedIndexRef = useRef(0);
 
-  // ── Layout maths ──
-  const availH = screenH - insets.top - insets.bottom - HUD_HEIGHT;
-  const videoH = availH * 0.56;
-  // Banner sits right at the join between video and panel (centred on the edge)
-  const bannerTop = insets.top + HUD_HEIGHT + videoH - BANNER_H / 2;
+  // ── Layout ──
+  const bannerTop = insets.top + HUD_HEIGHT + 10;
+
+  // ── Road animation ──
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(roadAnim, {
+        toValue: DASH_CYCLE,
+        duration: 600,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [roadAnim]);
 
   // ── Banner controller ──
   const showBanner = useCallback(
     (entry: AlertEntry) => {
       setBannerAlert(entry);
-
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-
       if (!bannerVisibleRef.current) {
         bannerVisibleRef.current = true;
         Animated.spring(bannerY, {
@@ -118,20 +325,42 @@ export default function LiveSessionScreen() {
           bounciness: 3,
         }).start();
       }
-
       bannerTimerRef.current = setTimeout(() => {
         Animated.timing(bannerY, {
-          toValue: -BANNER_H,
+          toValue: -BANNER_H - 8,
           duration: 220,
           useNativeDriver: true,
         }).start(() => {
           bannerVisibleRef.current = false;
           setBannerAlert(null);
         });
-      }, 3000);
+      }, 4000);
     },
     [bannerY],
   );
+
+  // ── Sync voice ref so WebSocket closure always reads current value ──
+  useEffect(() => {
+    voiceEnabledRef.current = voiceEnabled;
+    if (!voiceEnabled) Speech.stop();
+  }, [voiceEnabled]);
+
+  // ── TTS — speaks the alert twice in English ──
+  const speakAlert = useCallback((text: string) => {
+    if (!voiceEnabledRef.current) return;
+    Speech.stop();
+    Speech.speak(text, {
+      language: 'en-US',
+      rate: 0.9,
+      pitch: 1.0,
+      volume: 1.0,
+      onDone: () => {
+        if (voiceEnabledRef.current) {
+          Speech.speak(text, { language: 'en-US', rate: 0.9, pitch: 1.0, volume: 1.0 });
+        }
+      },
+    });
+  }, []);
 
   // ── REC pulsing ──
   useEffect(() => {
@@ -154,9 +383,10 @@ export default function LiveSessionScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Alert cycling ──
+  // ── Alert cycling (danger + warning only) ──
   useEffect(() => {
     function fire() {
+      if (!sessionActiveRef.current) return;
       const mock = MOCK_ALERTS[alertIndexRef.current % MOCK_ALERTS.length];
       alertIndexRef.current += 1;
       const entry: AlertEntry = {
@@ -167,20 +397,16 @@ export default function LiveSessionScreen() {
       };
       setAlertLog((prev) => [entry, ...prev].slice(0, 20));
       setScore((prev) => {
-        const delta =
-          entry.severity === 'danger' ? -0.1 : entry.severity === 'warning' ? -0.04 : 0.06;
+        const delta = entry.severity === 'danger' ? -0.1 : -0.04;
         return Math.max(1.5, Math.min(5.0, parseFloat((prev + delta).toFixed(1))));
       });
       showBanner(entry);
+      speakAlert(entry.message);
     }
-
     const firstId = setTimeout(fire, 1800);
     const id = setInterval(fire, 4500);
-    return () => {
-      clearTimeout(firstId);
-      clearInterval(id);
-    };
-  }, [showBanner]);
+    return () => { clearTimeout(firstId); clearInterval(id); };
+  }, [showBanner, speakAlert]);
 
   // ── Speed cycling ──
   useEffect(() => {
@@ -193,74 +419,200 @@ export default function LiveSessionScreen() {
 
   // ── Cleanup ──
   useEffect(() => {
-    return () => {
-      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-    };
+    return () => { if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current); };
   }, []);
 
-  // ── Stop handler ──
+  // ── WebSocket — Jetson device events ──────────────────────────────────────
+  // Not active until WS_URL points to a live backend.
+  useEffect(() => {
+    let destroyed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function connect() {
+      if (destroyed) return;
+      try {
+        const ws = new WebSocket(WS_URL);
+        wsRef.current = ws;
+
+        ws.onmessage = (evt) => {
+          if (!sessionActiveRef.current) return;
+          try {
+            const data: JetsonEvent = JSON.parse(evt.data as string);
+            if (data.type !== 'alert') return;
+            const entry: AlertEntry = {
+              id: String(Date.now()),
+              message: data.message,
+              severity: data.severity,
+              timestamp: elapsedRef.current,
+            };
+            setAlertLog((prev) => [entry, ...prev].slice(0, 20));
+            setScore((prev) => {
+              const delta = entry.severity === 'danger' ? -0.1 : -0.04;
+              return Math.max(1.5, Math.min(5.0, parseFloat((prev + delta).toFixed(1))));
+            });
+            showBanner(entry);
+            speakAlert(entry.message);
+          } catch { /* ignore malformed frames */ }
+        };
+
+        ws.onerror = () => { /* silent — backend not live yet */ };
+
+        ws.onclose = () => {
+          wsRef.current = null;
+          if (!destroyed) reconnectTimer = setTimeout(connect, 4000);
+        };
+      } catch { /* WebSocket unavailable */ }
+    }
+
+    connect();
+
+    return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
+      wsRef.current = null;
+    };
+  }, [showBanner, speakAlert]);
+
+  // ── Stop handler — freezes session immediately, then calls POST /trips/end ──
   function handleStop() {
-    Alert.alert('End Session?', 'Your session data will be saved.', [
-      { text: 'Keep Going', style: 'cancel' },
-      {
-        text: 'End Session',
-        style: 'destructive',
-        onPress: () => {
-          stopSession();
-          router.replace('/(tabs)');
-        },
-      },
-    ]);
+    sessionActiveRef.current = false;   // stops all new alerts + TTS at the gate
+    Speech.stop();
+
+    const snapshotScore   = score;
+    const snapshotElapsed = elapsedRef.current;
+    setFinalScore(snapshotScore);
+    setFinalElapsed(snapshotElapsed);
+    setShowSummary(true);
+
+    // POST /trips/end — non-blocking; updates summary if backend responds
+    const tripId = activeSessionId ?? ('s_' + Date.now());
+    endTrip(tripId).then((result) => {
+      if (!result) return;            // backend not ready, keep local data
+      setFinalScore(result.drive_score);
+      if (result.trip_duration) setFinalElapsed(result.trip_duration);
+    }).catch(() => {});
+  }
+
+  function handleSaveSession() {
+    const session: DrivingSession = {
+      id: 's_' + Date.now(),
+      userId: user?.id ?? 'u_001',
+      title: `Session · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      startedAt: new Date(Date.now() - finalElapsed * 1000).toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMinutes: Math.max(1, Math.ceil(finalElapsed / 60)),
+      score: finalScore,
+      scoreLabel: getScoreLabel(finalScore),
+      mistakes: alertLog.map((a) => ({
+        id: a.id,
+        type: alertType(a.message),
+        label: a.message,
+        timestamp: a.timestamp,
+        severity: a.severity === 'danger' ? 'high' as const : 'medium' as const,
+      })),
+    };
+    stopSession(session);
+    setShowSummary(false);
+    router.replace('/(tabs)');
+  }
+
+  function handleDiscardSession() {
+    Speech.stop();
+    stopSession();
+    setShowSummary(false);
+    router.replace('/(tabs)');
   }
 
   const scoreCol = scoreColor(score);
+  const dangerCount = alertLog.filter((a) => a.severity === 'danger').length;
+  const warningCount = alertLog.filter((a) => a.severity === 'warning').length;
+  const summaryLabel = getScoreLabel(finalScore);
+  const summaryCol = scoreColor(finalScore);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
-      {/* ── HUD bar ───────────────────────────────────────────── */}
+
+      {/* ── HUD bar ─────────────────────────────────────────────────────────── */}
       <View style={styles.hud}>
-        {/* Timer */}
         <Text style={styles.timer}>{formatTime(elapsed)}</Text>
 
-        {/* REC badge */}
         <View style={styles.recBadge}>
           <Animated.View style={[styles.recDot, { opacity: recPulse }]} />
           <Text style={styles.recText}>REC</Text>
         </View>
 
-        {/* Stop button */}
-        <TouchableOpacity onPress={handleStop} style={styles.stopBtn} hitSlop={8} activeOpacity={0.75}>
-          <MaterialCommunityIcons name="stop-circle" size={15} color="#fff" />
-          <Text style={styles.stopText}>STOP</Text>
-        </TouchableOpacity>
+        <View style={styles.hudRight}>
+          {/* Voice toggle */}
+          <TouchableOpacity
+            onPress={() => setVoiceEnabled((v) => !v)}
+            style={[styles.voiceBtn, !voiceEnabled && styles.voiceBtnOff]}
+            hitSlop={8}
+            activeOpacity={0.75}
+          >
+            <MaterialCommunityIcons
+              name={voiceEnabled ? 'volume-high' : 'volume-off'}
+              size={18}
+              color={voiceEnabled ? Colors.secondary.DEFAULT : 'rgba(255,255,255,0.35)'}
+            />
+          </TouchableOpacity>
+
+          {/* Stop button */}
+          <TouchableOpacity onPress={handleStop} style={styles.stopBtn} hitSlop={8} activeOpacity={0.75}>
+            <MaterialCommunityIcons name="stop-circle" size={15} color="#fff" />
+            <Text style={styles.stopText}>STOP</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* ── Video area ─────────────────────────────────────────── */}
-      <View style={[styles.video, { height: videoH }]}>
-        {/* Dark gradient background */}
-        <LinearGradient colors={['#0f1e1e', '#1a2e2e']} style={StyleSheet.absoluteFillObject} />
+      {/* ── Video / Road simulation ──────────────────────────────────────────── */}
+      <View style={styles.video}>
+        {/* Sky gradient */}
+        <LinearGradient colors={['#0d1f1f', '#1a3535']} style={StyleSheet.absoluteFillObject} />
 
-        {/* Grid overlay — subtle tech feel */}
-        <View style={styles.gridOverlay} />
+        {/* Road surface */}
+        <View style={styles.road}>
+          <LinearGradient colors={['#2a2a2a', '#1e1e1e']} style={StyleSheet.absoluteFillObject} />
 
-        {/* Centred placeholder content */}
-        <View style={styles.videoCenter}>
-          <MaterialCommunityIcons name="camera" size={52} color="rgba(255,255,255,0.18)" />
-          <Text style={styles.videoLabel}>Live DashCam Feed</Text>
-          <View style={styles.videoLivePill}>
-            <Animated.View style={[styles.recDotSm, { opacity: recPulse }]} />
-            <Text style={styles.videoLiveText}>LIVE</Text>
+          {/* Road edges */}
+          <View style={styles.roadEdgeLeft} />
+          <View style={styles.roadEdgeRight} />
+
+          {/* Animated center dashes */}
+          {Array.from({ length: N_DASHES }).map((_, i) => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.centerDash,
+                {
+                  top: i * DASH_CYCLE - DASH_CYCLE,
+                  transform: [{ translateY: roadAnim }],
+                },
+              ]}
+            />
+          ))}
+
+          {/* Car — top-down view */}
+          <View style={styles.carWrap}>
+            <TopDownCar />
           </View>
         </View>
 
-        {/* Score badge — top-right float */}
+        {/* Live session label — centered in video, on top of road */}
+        <View style={styles.liveLabel} pointerEvents="none">
+          <Animated.View style={[styles.liveLabelDot, { opacity: recPulse }]} />
+          <Text style={styles.liveLabelText}>LIVE SESSION</Text>
+        </View>
+
+        {/* Score badge — bottom-right */}
         <View style={[styles.scoreBadge, { borderColor: scoreCol }]}>
           <Text style={[styles.scoreBadgeNum, { color: scoreCol }]}>{score.toFixed(1)}</Text>
           <Text style={styles.scoreBadgeUnit}>/5.0</Text>
+          <Text style={styles.scoreBadgeLabel}>CURRENT{'\n'}SCORE</Text>
         </View>
 
-        {/* Speed limit sign — bottom-left float */}
+        {/* Speed sign — bottom-left */}
         <View style={styles.speedWrap}>
           <View style={styles.speedSign}>
             <Text style={styles.speedNum}>{detectedSpeed}</Text>
@@ -271,19 +623,22 @@ export default function LiveSessionScreen() {
           </View>
         </View>
 
-        {/* Bottom fade into dark panel */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.55)']}
-          style={styles.videoFade}
-        />
+        {/* Bottom fade */}
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.videoFade} />
       </View>
 
-      {/* ── Bottom dark panel ─────────────────────────────────── */}
-      <View style={[styles.panel, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {/* Drag handle */}
-        <View style={styles.panelHandle} />
+      {/* ── Bottom panel (height shrinks on drag, no gap possible) ─────────── */}
+      <Animated.View
+        style={[
+          styles.panel,
+          { paddingBottom: Math.max(insets.bottom, 12), height: panelHeight },
+        ]}
+      >
+        {/* Drag zone — wider touch target around the handle */}
+        <View {...panResponder.panHandlers} style={styles.dragZone}>
+          <View style={styles.panelHandle} />
+        </View>
 
-        {/* Panel header */}
         <View style={styles.panelHeader}>
           <MaterialCommunityIcons name="alert-circle" size={17} color={Colors.error.container} />
           <Text style={styles.panelTitle}>Live Alerts</Text>
@@ -292,7 +647,6 @@ export default function LiveSessionScreen() {
           </View>
         </View>
 
-        {/* Alert list */}
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.alertListContent}
@@ -305,25 +659,22 @@ export default function LiveSessionScreen() {
             </View>
           ) : (
             alertLog.map((a) => (
-              <View key={a.id} style={styles.alertRow}>
+              <View key={a.id} style={[styles.alertRow, { borderLeftColor: severityAccent(a.severity) }]}>
                 <View style={[styles.alertDot, { backgroundColor: severityFg(a.severity) }]} />
-                <Text style={styles.alertRowMsg} numberOfLines={1}>
-                  {a.message}
-                </Text>
+                <Text style={styles.alertRowMsg} numberOfLines={1}>{a.message}</Text>
                 <Text style={styles.alertRowTime}>{formatTime(a.timestamp)}</Text>
                 <View style={[styles.alertChip, { backgroundColor: `${severityAccent(a.severity)}44` }]}>
                   <Text style={[styles.alertChipText, { color: severityFg(a.severity) }]}>
-                    {a.severity === 'danger' ? 'DANGER' : a.severity === 'warning' ? 'WARN' : 'SAFE'}
+                    {a.severity === 'danger' ? 'DANGER' : 'WARN'}
                   </Text>
                 </View>
               </View>
             ))
           )}
         </ScrollView>
-      </View>
+      </Animated.View>
 
-      {/* ── Floating alert banner ─────────────────────────────── */}
-      {/* Sits at the video/panel junction, slides in/out vertically */}
+      {/* ── Alert banner (slides from below HUD) ────────────────────────────── */}
       <Animated.View
         style={[
           styles.banner,
@@ -333,41 +684,140 @@ export default function LiveSessionScreen() {
             transform: [{ translateY: bannerY }],
           },
         ]}
+        pointerEvents="none"
       >
         {bannerAlert && (
           <>
-            <MaterialCommunityIcons
-              name={
-                bannerAlert.severity === 'danger'
-                  ? 'alert-circle'
-                  : bannerAlert.severity === 'warning'
-                  ? 'alert'
-                  : 'check-circle'
-              }
-              size={18}
-              color={severityFg(bannerAlert.severity)}
-            />
-            <Text style={styles.bannerMsg} numberOfLines={1}>
-              {bannerAlert.message}
-            </Text>
+            <View style={[styles.bannerIconWrap, { backgroundColor: `${severityAccent(bannerAlert.severity)}33` }]}>
+              <MaterialCommunityIcons
+                name={bannerAlert.severity === 'danger' ? 'alert-circle' : 'alert'}
+                size={22}
+                color={severityFg(bannerAlert.severity)}
+              />
+            </View>
+            <Text style={styles.bannerMsg} numberOfLines={2}>{bannerAlert.message}</Text>
             <View style={[styles.bannerChip, { backgroundColor: `${severityAccent(bannerAlert.severity)}44` }]}>
               <Text style={[styles.bannerChipTxt, { color: severityFg(bannerAlert.severity) }]}>
-                {bannerAlert.severity === 'danger' ? 'DANGER' : bannerAlert.severity === 'warning' ? 'WARN' : 'SAFE'}
+                {bannerAlert.severity === 'danger' ? 'DANGER' : 'WARN'}
               </Text>
             </View>
           </>
         )}
       </Animated.View>
+
+      {/* ── Session Summary Modal ─────────────────────────────────────────────── */}
+      <Modal
+        visible={showSummary}
+        animationType="slide"
+        transparent={false}
+        statusBarTranslucent
+      >
+        <StatusBar style="light" />
+        <View style={[styles.summaryRoot, { paddingTop: insets.top + 12 }]}>
+          {/* Scrollable content */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.summaryScroll}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header */}
+            <View style={styles.summaryHeader}>
+              <View style={styles.summaryHeaderIcon}>
+                <MaterialCommunityIcons name="flag-checkered" size={26} color="#fff" />
+              </View>
+              <Text style={styles.summaryHeaderTitle}>Session Complete</Text>
+            </View>
+
+            {/* Score block */}
+            <View style={[styles.summaryScoreBlock, { borderColor: `${summaryCol}44` }]}>
+              <Text style={[styles.summaryScoreNum, { color: summaryCol }]}>
+                {finalScore.toFixed(1)}
+              </Text>
+              <Text style={styles.summaryScoreDen}>/5.0</Text>
+              <View style={[styles.summaryScoreLabel, { backgroundColor: `${summaryCol}22` }]}>
+                <Text style={[styles.summaryScoreLabelText, { color: summaryCol }]}>{summaryLabel}</Text>
+              </View>
+            </View>
+
+            {/* Stats */}
+            <View style={styles.summaryStats}>
+              <View style={styles.summaryStatRow}>
+                <View style={[styles.summaryStatIcon, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+                  <MaterialCommunityIcons name="timer-outline" size={20} color="rgba(255,255,255,0.7)" />
+                </View>
+                <Text style={styles.summaryStatLabel}>Duration</Text>
+                <Text style={styles.summaryStatValue}>{formatTime(finalElapsed)}</Text>
+              </View>
+              <View style={styles.summaryStatDivider} />
+              <View style={styles.summaryStatRow}>
+                <View style={[styles.summaryStatIcon, { backgroundColor: `${Colors.error.DEFAULT}22` }]}>
+                  <MaterialCommunityIcons name="alert-circle" size={20} color={Colors.error.DEFAULT} />
+                </View>
+                <Text style={styles.summaryStatLabel}>Danger Alerts</Text>
+                <Text style={[styles.summaryStatValue, { color: Colors.error.DEFAULT }]}>{dangerCount}</Text>
+              </View>
+              <View style={styles.summaryStatDivider} />
+              <View style={styles.summaryStatRow}>
+                <View style={[styles.summaryStatIcon, { backgroundColor: `${Colors.tertiary.DEFAULT}22` }]}>
+                  <MaterialCommunityIcons name="alert" size={20} color={Colors.tertiary.DEFAULT} />
+                </View>
+                <Text style={styles.summaryStatLabel}>Warning Alerts</Text>
+                <Text style={[styles.summaryStatValue, { color: Colors.tertiary.DEFAULT }]}>{warningCount}</Text>
+              </View>
+            </View>
+
+            {/* Alert list */}
+            {alertLog.length > 0 && (
+              <View style={styles.summaryAlertSection}>
+                <Text style={styles.summaryAlertSectionTitle}>ALERTS THIS SESSION</Text>
+                {alertLog.map((a) => (
+                  <View key={a.id} style={[styles.summaryAlertItem, { borderLeftColor: severityAccent(a.severity) }]}>
+                    <MaterialCommunityIcons
+                      name={a.severity === 'danger' ? 'alert-circle' : 'alert'}
+                      size={15}
+                      color={severityFg(a.severity)}
+                    />
+                    <Text style={styles.summaryAlertMsg} numberOfLines={1}>{a.message}</Text>
+                    <View style={[styles.summaryAlertChip, { backgroundColor: `${severityAccent(a.severity)}33` }]}>
+                      <Text style={[styles.summaryAlertChipText, { color: severityFg(a.severity) }]}>
+                        {a.severity === 'danger' ? 'DANGER' : 'WARN'}
+                      </Text>
+                    </View>
+                    <Text style={styles.summaryAlertTime}>{formatTime(a.timestamp)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Fixed buttons at bottom */}
+          <View style={[styles.summaryActions, { paddingBottom: insets.bottom + 16 }]}>
+            <TouchableOpacity onPress={handleSaveSession} activeOpacity={0.85} style={styles.saveBtn}>
+              <LinearGradient
+                colors={[Colors.primary.container, Colors.secondary.DEFAULT]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.saveBtnGradient}
+              >
+                <MaterialCommunityIcons name="content-save" size={20} color="#fff" />
+                <Text style={styles.saveBtnText}>Save Session</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleDiscardSession} activeOpacity={0.8} style={styles.discardBtn}>
+              <MaterialCommunityIcons name="delete-outline" size={20} color={Colors.error.DEFAULT} />
+              <Text style={styles.discardBtnText}>Discard Session</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#0a1212',
-  },
+  root: { flex: 1, backgroundColor: Colors.surface.inverse },
 
   // ── HUD ──
   hud: {
@@ -411,6 +861,25 @@ const styles = StyleSheet.create({
     color: Colors.error.container,
     letterSpacing: 1.5,
   },
+  hudRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  voiceBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  voiceBtnOff: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
   stopBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -429,75 +898,86 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
 
-  // ── Video ──
+  // ── Video / Road ──
   video: {
+    flex: 1,
     width: '100%',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gridOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.03,
-    borderWidth: 1,
-    borderColor: '#fff',
+  road: {
+    width: 200,
+    height: '100%',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  videoCenter: {
+  roadEdgeLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: '#fff',
+    opacity: 0.7,
+  },
+  roadEdgeRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: '#fff',
+    opacity: 0.7,
+  },
+  centerDash: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -2,
+    width: 4,
+    height: 40,
+    backgroundColor: '#fff',
+    opacity: 0.6,
+    borderRadius: 2,
+  },
+  carWrap: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    gap: 10,
-  },
-  videoLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.35)',
-    letterSpacing: 0.3,
-  },
-  videoLivePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(186,26,26,0.25)',
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(186,26,26,0.5)',
-  },
-  recDotSm: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.error.DEFAULT,
-  },
-  videoLiveText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.error.container,
-    letterSpacing: 2,
   },
 
   // Score badge
   scoreBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(10,18,18,0.82)',
+    bottom: 16,
+    right: 14,
+    backgroundColor: 'rgba(10,18,18,0.88)',
     borderRadius: 14,
     borderWidth: 2,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     alignItems: 'center',
+    gap: 1,
   },
   scoreBadgeNum: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
-    lineHeight: 26,
+    lineHeight: 28,
   },
   scoreBadgeUnit: {
     fontSize: 10,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.45)',
-    marginTop: -2,
+  },
+  scoreBadgeLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginTop: 2,
   },
 
   // Speed sign
@@ -509,36 +989,35 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   speedSign: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#fff',
-    borderWidth: 4,
+    borderWidth: 5,
     borderColor: Colors.error.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6,
   },
   speedNum: {
-    fontSize: 17,
+    fontSize: 22,
     fontWeight: '900',
     color: '#111',
-    lineHeight: 20,
+    lineHeight: 26,
   },
   speedUnit: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: '700',
     color: '#444',
     letterSpacing: -0.2,
-    lineHeight: 9,
   },
   detectedTag: {
     backgroundColor: Colors.error.DEFAULT,
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
@@ -549,7 +1028,32 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Video fade
+  liveLabel: {
+    position: 'absolute',
+    top: 82,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  liveLabelDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.error.DEFAULT,
+  },
+  liveLabelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: 2,
+  },
   videoFade: {
     position: 'absolute',
     bottom: 0,
@@ -558,23 +1062,27 @@ const styles = StyleSheet.create({
     height: 64,
   },
 
-  // ── Bottom panel ──
+  // ── Panel ──
   panel: {
-    flex: 1,
     backgroundColor: Colors.surface.inverse,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
     paddingHorizontal: 16,
     marginTop: -16,
+    overflow: 'hidden',
+  },
+  dragZone: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 12,
   },
   panelHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignSelf: 'center',
-    marginBottom: 14,
   },
   panelHeader: {
     flexDirection: 'row',
@@ -603,30 +1111,25 @@ const styles = StyleSheet.create({
     color: Colors.error.container,
   },
 
-  // Alert list
-  alertListContent: {
-    gap: 2,
-    paddingBottom: 8,
-  },
-  emptyState: {
-    paddingVertical: 24,
-    alignItems: 'center',
-    gap: 8,
-  },
+  alertListContent: { gap: 2, paddingBottom: 8 },
+  emptyState: { paddingVertical: 24, alignItems: 'center', gap: 8 },
   emptyStateText: {
     fontSize: 13,
     color: 'rgba(238,241,241,0.35)',
     fontWeight: '500',
   },
 
-  // Alert row
   alertRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 9,
+    paddingVertical: 10,
+    paddingLeft: 10,
+    borderLeftWidth: 3,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.05)',
+    marginLeft: -16,
+    paddingRight: 0,
   },
   alertDot: {
     width: 8,
@@ -658,7 +1161,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // ── Floating banner ──
+  // ── Banner ──
   banner: {
     position: 'absolute',
     left: 12,
@@ -666,34 +1169,222 @@ const styles = StyleSheet.create({
     height: BANNER_H,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(18,28,28,0.95)',
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    paddingHorizontal: 14,
+    gap: 12,
+    backgroundColor: 'rgba(14,24,24,0.97)',
+    borderRadius: 18,
+    borderLeftWidth: 5,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     zIndex: 30,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 14,
+  },
+  bannerIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   bannerMsg: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: Colors.surface.inverseOn,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   bannerChip: {
     paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  bannerChipTxt: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // ── Summary Modal ──
+  summaryRoot: {
+    flex: 1,
+    backgroundColor: '#0a1212',
+  },
+  summaryScroll: {
+    paddingHorizontal: 24,
+    paddingTop: 4,
+    paddingBottom: 16,
+    gap: 20,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  summaryHeaderIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.primary.container,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryHeaderTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  summaryScoreBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+  },
+  summaryScoreNum: {
+    fontSize: 72,
+    fontWeight: '700',
+    lineHeight: 76,
+  },
+  summaryScoreDen: {
+    fontSize: 20,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  summaryScoreLabel: {
+    marginBottom: 8,
+    marginLeft: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  summaryScoreLabelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  summaryStats: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  summaryStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+  },
+  summaryStatIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryStatLabel: {
+    flex: 1,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.65)',
+    fontWeight: '500',
+  },
+  summaryStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    fontVariant: ['tabular-nums'],
+  },
+  summaryStatDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  summaryActions: {
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#0a1212',
+  },
+  summaryAlertSection: {
+    gap: 8,
+  },
+  summaryAlertSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  summaryAlertItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingLeft: 12,
+    paddingRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    marginBottom: 6,
+  },
+  summaryAlertMsg: {
+    flex: 1,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  summaryAlertChip: {
+    paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 6,
   },
-  bannerChipTxt: {
+  summaryAlertChipText: {
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  summaryAlertTime: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    fontVariant: ['tabular-nums'],
+  },
+  saveBtn: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  saveBtnGradient: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  saveBtnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  discardBtn: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: `${Colors.error.DEFAULT}66`,
+    backgroundColor: `${Colors.error.DEFAULT}0d`,
+  },
+  discardBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.error.DEFAULT,
   },
 });

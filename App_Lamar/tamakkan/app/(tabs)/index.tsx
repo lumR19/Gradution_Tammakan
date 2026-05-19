@@ -47,7 +47,7 @@ function SessionCard({ session }: { session: DrivingSession }) {
         </Text>
       </View>
       <View style={styles.sessionScoreCol}>
-        <Text style={[styles.sessionScoreNum, { color: scoreColor }]}>{session.score}</Text>
+        <Text style={[styles.sessionScoreNum, { color: scoreColor }]}>{session.score.toFixed(1)}</Text>
         <Text style={styles.sessionScoreLabel}>{session.scoreLabel}</Text>
       </View>
     </View>
@@ -59,6 +59,7 @@ export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
   const {
     dashcamConnected,
+    dashcamDevice,
     sessions,
     stats,
     dailyTip,
@@ -72,13 +73,18 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!user) return;
-    getSessions(user.id).then(setSessions).catch(() => {});
+    // Only fetch sessions if none exist locally (preserves locally saved sessions)
+    if (sessions.length === 0) {
+      getSessions(user.id).then(setSessions).catch(() => {});
+    }
     getStats(user.id).then(setStats).catch(() => {});
     getDailyTip().then(setDailyTip).catch(() => {});
-  }, [user?.id]);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lastSession = sessions[0] ?? null;
-  const currentScore = stats?.currentScore ?? 4.5;
+  const averageScore = sessions.length > 0
+    ? Number((sessions.reduce((s, d) => s + d.score, 0) / sessions.length).toFixed(2))
+    : stats?.currentScore ?? 4.5;
   const totalDrives = sessions.length;
   const totalAlerts = sessions.reduce((sum, s) => sum + s.mistakes.length, 0);
   const formatTime = (iso: string) =>
@@ -108,8 +114,12 @@ export default function HomeScreen() {
             <Text style={styles.greetingName}>Hello, {firstName}!</Text>
             {dashcamConnected && (
               <View style={styles.connectedBadge}>
-                <MaterialCommunityIcons name="video" size={13} color={Colors.secondary.onContainer} />
-                <Text style={styles.connectedBadgeText}>Connected</Text>
+                <View style={styles.connectedDot} />
+                <Text style={styles.connectedBadgeText} numberOfLines={1}>
+                  {dashcamDevice?.name ?? 'DashCam'}
+                </Text>
+                <Text style={styles.connectedBadgeSep}>·</Text>
+                <Text style={styles.connectedBadgeStatus}>Connected</Text>
               </View>
             )}
           </View>
@@ -126,7 +136,7 @@ export default function HomeScreen() {
 
             {/* Start Driving button */}
             <TouchableOpacity
-              onPress={() => router.push('/session')}
+              onPress={() => router.push('/wifi-connection')}
               activeOpacity={0.85}
               style={styles.startBtn}
             >
@@ -144,9 +154,9 @@ export default function HomeScreen() {
             {/* Current Score card */}
             <View style={styles.scoreCard}>
               <View style={styles.scoreCardLeft}>
-                <Text style={styles.cardLabel}>CURRENT SCORE</Text>
+                <Text style={styles.cardLabel}>AVERAGE SCORE</Text>
                 <View style={styles.scoreLine}>
-                  <Text style={styles.scoreNum}>{currentScore.toFixed(1)}</Text>
+                  <Text style={styles.scoreNum}>{averageScore.toFixed(1)}</Text>
                   <Text style={styles.scoreUnit}>/5.0</Text>
                 </View>
                 <View style={styles.scoreTrend}>
@@ -155,7 +165,7 @@ export default function HomeScreen() {
                 </View>
               </View>
               <ScoreRing
-                score={currentScore}
+                score={averageScore}
                 maxScore={5}
                 size={96}
                 strokeWidth={8}
@@ -236,9 +246,9 @@ export default function HomeScreen() {
                 {/* Score circle — top right */}
                 <View style={[styles.lastDriveScore, { borderColor: getScoreColor(lastSession.score) }]}>
                   <Text style={[styles.lastDriveScoreNum, { color: getScoreColor(lastSession.score) }]}>
-                    {lastSession.score}
+                    {lastSession.score.toFixed(1)}
                   </Text>
-                  <Text style={styles.lastDriveScorePts}>pts</Text>
+                  <Text style={styles.lastDriveScorePts}>/5</Text>
                 </View>
 
                 {/* Play button — center */}
@@ -316,9 +326,9 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.statNumRow}>
                   <Text style={[styles.statNum, { color: Colors.primary.DEFAULT }]}>
-                    {stats?.lastScore ?? 88}
+                    {(stats?.lastScore ?? 4.4).toFixed(1)}
                   </Text>
-                  <Text style={styles.statUnit}>/100</Text>
+                  <Text style={styles.statUnit}>/5</Text>
                 </View>
                 <Text style={styles.statSub}>Great lane discipline</Text>
               </View>
@@ -428,10 +438,10 @@ export default function HomeScreen() {
                 {/* Score block */}
                 <View style={styles.summaryScoreRow}>
                   <Text style={[styles.summaryScoreBig, { color: getScoreColor(lastSession.score) }]}>
-                    {lastSession.score}
+                    {lastSession.score.toFixed(1)}
                   </Text>
                   <View style={styles.summaryScoreMeta}>
-                    <Text style={styles.summaryScoreOutOf}>/100</Text>
+                    <Text style={styles.summaryScoreOutOf}>/5</Text>
                     <View style={[styles.summaryScoreLabelBadge, { backgroundColor: `${getScoreColor(lastSession.score)}22` }]}>
                       <Text style={[styles.summaryScoreLabelText, { color: getScoreColor(lastSession.score) }]}>
                         {lastSession.scoreLabel}
@@ -561,10 +571,28 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.secondary.container}55`,
     borderRadius: 999,
   },
+  connectedDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.secondary.DEFAULT,
+  },
   connectedBadgeText: {
     fontSize: 12,
     fontWeight: '600',
     color: Colors.secondary.onContainer,
+    maxWidth: 140,
+  },
+  connectedBadgeSep: {
+    fontSize: 12,
+    color: Colors.secondary.onContainer,
+    opacity: 0.5,
+  },
+  connectedBadgeStatus: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.secondary.onContainer,
+    opacity: 0.8,
   },
   subtitle: {
     fontSize: 16,

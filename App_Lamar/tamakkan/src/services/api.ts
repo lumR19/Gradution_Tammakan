@@ -50,7 +50,7 @@ const MOCK_SESSIONS: DrivingSession[] = [
     startedAt: '2024-10-24T17:00:00Z',
     endedAt: '2024-10-24T17:45:00Z',
     durationMinutes: 45,
-    score: 92,
+    score: 4.6,
     scoreLabel: 'EXCELLENT',
     mistakes: [],
   },
@@ -61,7 +61,7 @@ const MOCK_SESSIONS: DrivingSession[] = [
     startedAt: '2024-10-22T09:00:00Z',
     endedAt: '2024-10-22T09:32:00Z',
     durationMinutes: 32,
-    score: 76,
+    score: 3.8,
     scoreLabel: 'GOOD',
     mistakes: [
       { id: 'm_001', type: 'harsh_braking', label: 'Harsh Braking', timestamp: 300, severity: 'medium' },
@@ -75,7 +75,7 @@ const MOCK_SESSIONS: DrivingSession[] = [
     startedAt: '2024-10-21T17:30:00Z',
     endedAt: '2024-10-21T17:54:00Z',
     durationMinutes: 24,
-    score: 84,
+    score: 4.2,
     scoreLabel: 'GOOD',
     mistakes: [],
   },
@@ -86,7 +86,7 @@ const MOCK_SESSIONS: DrivingSession[] = [
     startedAt: '2024-10-20T07:00:00Z',
     endedAt: '2024-10-20T07:38:00Z',
     durationMinutes: 38,
-    score: 88,
+    score: 4.4,
     scoreLabel: 'EXCELLENT',
     mistakes: [
       { id: 'm_003', type: 'lane_departure', label: 'Lane Departure', timestamp: 600, severity: 'low' },
@@ -103,7 +103,7 @@ const MOCK_STATS: DrivingStats = {
   trainingHours: 14.5,
   sessionsThisWeek: 4,
   topImprovementArea: 'Harsh Braking',
-  lastScore: 88,
+  lastScore: 4.4,
 };
 
 const MOCK_DEVICE: DashcamDevice = {
@@ -215,6 +215,25 @@ export async function stopSession(sessionId: string): Promise<DrivingSession> {
       id: sessionId,
       endedAt: new Date().toISOString(),
     };
+  }
+}
+
+// ─── Trip End ─────────────────────────────────────────────────────────────────
+
+export interface TripEndResponse {
+  drive_score: number;
+  event_counts: Record<string, number>;  // e.g. { harsh_braking: 3, lane_departure: 2 }
+  trip_duration: number;                 // seconds
+  metadata?: Record<string, unknown>;
+}
+
+export async function endTrip(tripId: string): Promise<TripEndResponse | null> {
+  try {
+    const res = await api.post<TripEndResponse>('/trips/end', { trip_id: tripId });
+    return res.data;
+  } catch {
+    // Backend not implemented yet — caller falls back to local session data
+    return null;
   }
 }
 

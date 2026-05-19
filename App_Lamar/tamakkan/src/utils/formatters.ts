@@ -13,7 +13,7 @@ export function formatDuration(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export function getScoreLabel(score: number, maxScore = 100): ScoreLabel {
+export function getScoreLabel(score: number, maxScore = 5): ScoreLabel {
   const pct = (score / maxScore) * 100;
   if (pct >= 90) return 'EXCELLENT';
   if (pct >= 75) return 'GOOD';
@@ -21,7 +21,7 @@ export function getScoreLabel(score: number, maxScore = 100): ScoreLabel {
   return 'NEEDS WORK';
 }
 
-export function getScoreColor(score: number, maxScore = 100): string {
+export function getScoreColor(score: number, maxScore = 5): string {
   const pct = (score / maxScore) * 100;
   if (pct >= 90) return Colors.score.excellent;
   if (pct >= 75) return Colors.score.good;

@@ -10,6 +10,7 @@ interface SessionState {
   dailyTip: DrivingTip | null;
   isLoadingStats: boolean;
   isLoadingSessions: boolean;
+  savedDevices: DashcamDevice[];
 
   setDashcamConnected: (connected: boolean, device?: DashcamDevice) => void;
   setSessions: (sessions: DrivingSession[]) => void;
@@ -19,9 +20,11 @@ interface SessionState {
   stopSession: (completedSession?: DrivingSession) => void;
   setLoadingStats: (loading: boolean) => void;
   setLoadingSessions: (loading: boolean) => void;
+  addSavedDevice: (device: DashcamDevice) => void;
+  removeSavedDevice: (deviceId: string) => void;
 }
 
-export const useSessionStore = create<SessionState>((set) => ({
+export const useSessionStore = create<SessionState>((set, get) => ({
   dashcamConnected: false,
   dashcamDevice: null,
   activeSessionId: null,
@@ -30,6 +33,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   dailyTip: null,
   isLoadingStats: false,
   isLoadingSessions: false,
+  savedDevices: [],
 
   setDashcamConnected: (connected, device) =>
     set({ dashcamConnected: connected, dashcamDevice: device ?? null }),
@@ -50,4 +54,15 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   setLoadingStats: (isLoadingStats) => set({ isLoadingStats }),
   setLoadingSessions: (isLoadingSessions) => set({ isLoadingSessions }),
+
+  addSavedDevice: (device) => {
+    const existing = get().savedDevices;
+    const withoutDuplicate = existing.filter((d) => d.id !== device.id);
+    set({ savedDevices: [device, ...withoutDuplicate] });
+  },
+
+  removeSavedDevice: (deviceId) =>
+    set((state) => ({
+      savedDevices: state.savedDevices.filter((d) => d.id !== deviceId),
+    })),
 }));
