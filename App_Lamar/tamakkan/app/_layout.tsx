@@ -1,10 +1,15 @@
 import '../global.css';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 export default function RootLayout() {
+  const { loaded, load } = useSettingsStore();
+  useEffect(() => { if (!loaded) load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

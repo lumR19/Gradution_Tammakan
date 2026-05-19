@@ -4,6 +4,9 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Animated,
   Easing,
@@ -22,6 +25,7 @@ import { getTripCache, saveTripCache } from '@/utils/tripCache';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { getScoreLabel } from '@/utils/formatters';
 import { DrivingSession, MistakeType } from '@/types';
 
@@ -229,6 +233,7 @@ export default function LiveSessionScreen() {
   const stopSession      = useSessionStore((s) => s.stopSession);
   const activeSessionId  = useSessionStore((s) => s.activeSessionId);
   const user = useAuthStore((s) => s.user);
+  const voiceAlertsEnabled = useSettingsStore((s) => s.voiceAlertsEnabled);
 
   // ── State ──
   const elapsedRef = useRef(0);
@@ -237,10 +242,13 @@ export default function LiveSessionScreen() {
   const [alertLog, setAlertLog] = useState<AlertEntry[]>([]);
   const [bannerAlert, setBannerAlert] = useState<AlertEntry | null>(null);
   const [detectedSpeed, setDetectedSpeed] = useState(60);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  // Initialise from the persisted Settings toggle so the global setting is respected
+  const [voiceEnabled, setVoiceEnabled] = useState(voiceAlertsEnabled);
   const [showSummary, setShowSummary] = useState(false);
   const [finalScore, setFinalScore] = useState(4.2);
   const [finalElapsed, setFinalElapsed] = useState(0);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [sessionNameDraft, setSessionNameDraft] = useState('');
 
   // ── Layout constants (needed before refs for Animated.Value init) ──
   const availH     = screenH - insets.top - insets.bottom - HUD_HEIGHT;
@@ -255,7 +263,7 @@ export default function LiveSessionScreen() {
   const bannerTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bannerVisibleRef = useRef(false);
   const wsRef            = useRef<WebSocket | null>(null);
-  const voiceEnabledRef  = useRef(true);
+  const voiceEnabledRef  = useRef(voiceAlertsEnabled);
   const sessionActiveRef = useRef(true);   // flipped to false the moment STOP is pressed
 
   // ── Panel drag (height-based — shrinks downward, no gap ever) ──
@@ -495,11 +503,19 @@ export default function LiveSessionScreen() {
     }).catch(() => {});
   }
 
+  function openNameModal() {
+    const defaultName = `Session · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    setSessionNameDraft(defaultName);
+    setShowNameModal(true);
+  }
+
   function handleSaveSession() {
+    const title = sessionNameDraft.trim() ||
+      `Session · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
     const session: DrivingSession = {
       id: 's_' + Date.now(),
       userId: user?.id ?? 'u_001',
-      title: `Session · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      title,
       startedAt: new Date(Date.now() - finalElapsed * 1000).toISOString(),
       endedAt: new Date().toISOString(),
       durationMinutes: Math.max(1, Math.ceil(finalElapsed / 60)),
@@ -516,6 +532,7 @@ export default function LiveSessionScreen() {
     stopSession(session);
     const uid = user?.id ?? 'u_001';
     getTripCache(uid).then((cached) => saveTripCache(uid, [session, ...cached]));
+    setShowNameModal(false);
     setShowSummary(false);
     router.replace('/(tabs)');
   }
@@ -715,7 +732,7 @@ export default function LiveSessionScreen() {
         transparent={false}
         statusBarTranslucent
       >
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <View style={[styles.summaryRoot, { paddingTop: insets.top + 12 }]}>
           {/* Scrollable content */}
           <ScrollView
@@ -745,8 +762,8 @@ export default function LiveSessionScreen() {
             {/* Stats */}
             <View style={styles.summaryStats}>
               <View style={styles.summaryStatRow}>
-                <View style={[styles.summaryStatIcon, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-                  <MaterialCommunityIcons name="timer-outline" size={20} color="rgba(255,255,255,0.7)" />
+                <View style={[styles.summaryStatIcon, { backgroundColor: Colors.surface.containerHigh }]}>
+                  <MaterialCommunityIcons name="timer-outline" size={20} color={Colors.outline.DEFAULT} />
                 </View>
                 <Text style={styles.summaryStatLabel}>Duration</Text>
                 <Text style={styles.summaryStatValue}>{formatTime(finalElapsed)}</Text>
@@ -795,7 +812,7 @@ export default function LiveSessionScreen() {
 
           {/* Fixed buttons at bottom */}
           <View style={[styles.summaryActions, { paddingBottom: insets.bottom + 16 }]}>
-            <TouchableOpacity onPress={handleSaveSession} activeOpacity={0.85} style={styles.saveBtn}>
+            <TouchableOpacity onPress={openNameModal} activeOpacity={0.85} style={styles.saveBtn}>
               <LinearGradient
                 colors={[Colors.primary.container, Colors.secondary.DEFAULT]}
                 start={{ x: 0, y: 0 }}
@@ -812,6 +829,48 @@ export default function LiveSessionScreen() {
               <Text style={styles.discardBtnText}>Discard Session</Text>
             </TouchableOpacity>
           </View>
+
+          {/* ── Naming overlay — lives inside the summary modal so it stacks correctly ── */}
+          {showNameModal && (
+            <KeyboardAvoidingView
+              style={styles.nameOverlay}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+              <View style={styles.nameCard}>
+                <Text style={styles.nameCardTitle}>Name Your Session</Text>
+                <Text style={styles.nameCardSub}>Give this drive a memorable name</Text>
+                <TextInput
+                  style={styles.nameInput}
+                  value={sessionNameDraft}
+                  onChangeText={setSessionNameDraft}
+                  placeholder="e.g. Morning Commute"
+                  placeholderTextColor={Colors.outline.variant}
+                  maxLength={50}
+                  autoFocus
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleSaveSession}
+                />
+                <View style={styles.nameActions}>
+                  <TouchableOpacity
+                    style={styles.nameCancelBtn}
+                    onPress={() => setShowNameModal(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.nameCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.nameSaveBtn}
+                    onPress={handleSaveSession}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialCommunityIcons name="content-save" size={18} color="#fff" />
+                    <Text style={styles.nameSaveText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          )}
         </View>
       </Modal>
     </View>
@@ -1067,7 +1126,7 @@ const styles = StyleSheet.create({
 
   // ── Panel ──
   panel: {
-    backgroundColor: Colors.surface.inverse,
+    backgroundColor: Colors.surface.containerLowest,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
@@ -1084,7 +1143,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: Colors.outline.variant,
     alignSelf: 'center',
   },
   panelHeader: {
@@ -1097,7 +1156,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.surface.inverseOn,
+    color: Colors.surface.on,
   },
   countBadge: {
     minWidth: 24,
@@ -1111,14 +1170,14 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.error.container,
+    color: Colors.error.DEFAULT,
   },
 
   alertListContent: { gap: 2, paddingBottom: 8 },
   emptyState: { paddingVertical: 24, alignItems: 'center', gap: 8 },
   emptyStateText: {
     fontSize: 13,
-    color: 'rgba(238,241,241,0.35)',
+    color: Colors.outline.DEFAULT,
     fontWeight: '500',
   },
 
@@ -1130,7 +1189,7 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     borderLeftWidth: 3,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: Colors.surface.containerHigh,
     marginLeft: -16,
     paddingRight: 0,
   },
@@ -1144,12 +1203,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: '500',
-    color: Colors.surface.inverseOn,
+    color: Colors.surface.on,
     lineHeight: 18,
   },
   alertRowTime: {
     fontSize: 11,
-    color: 'rgba(238,241,241,0.4)',
+    color: Colors.outline.DEFAULT,
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
   },
@@ -1214,7 +1273,7 @@ const styles = StyleSheet.create({
   // ── Summary Modal ──
   summaryRoot: {
     flex: 1,
-    backgroundColor: '#0a1212',
+    backgroundColor: Colors.background,
   },
   summaryScroll: {
     paddingHorizontal: 24,
@@ -1238,13 +1297,13 @@ const styles = StyleSheet.create({
   summaryHeaderTitle: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#fff',
+    color: Colors.surface.on,
   },
   summaryScoreBlock: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Colors.surface.containerLow,
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
@@ -1256,7 +1315,7 @@ const styles = StyleSheet.create({
   },
   summaryScoreDen: {
     fontSize: 20,
-    color: 'rgba(255,255,255,0.4)',
+    color: Colors.outline.DEFAULT,
     fontWeight: '500',
     marginBottom: 8,
   },
@@ -1273,7 +1332,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   summaryStats: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Colors.surface.containerLow,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -1294,26 +1353,26 @@ const styles = StyleSheet.create({
   summaryStatLabel: {
     flex: 1,
     fontSize: 15,
-    color: 'rgba(255,255,255,0.65)',
+    color: Colors.outline.DEFAULT,
     fontWeight: '500',
   },
   summaryStatValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#fff',
+    color: Colors.surface.on,
     fontVariant: ['tabular-nums'],
   },
   summaryStatDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: Colors.surface.containerHigh,
   },
   summaryActions: {
     gap: 12,
     paddingHorizontal: 24,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: '#0a1212',
+    borderTopColor: Colors.surface.containerHigh,
+    backgroundColor: Colors.background,
   },
   summaryAlertSection: {
     gap: 8,
@@ -1321,7 +1380,7 @@ const styles = StyleSheet.create({
   summaryAlertSectionTitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.35)',
+    color: Colors.outline.DEFAULT,
     letterSpacing: 1,
     marginBottom: 4,
   },
@@ -1332,7 +1391,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingLeft: 12,
     paddingRight: 8,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: Colors.surface.containerLow,
     borderRadius: 12,
     borderLeftWidth: 3,
     marginBottom: 6,
@@ -1340,7 +1399,7 @@ const styles = StyleSheet.create({
   summaryAlertMsg: {
     flex: 1,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
+    color: Colors.surface.on,
     fontWeight: '500',
   },
   summaryAlertChip: {
@@ -1355,7 +1414,7 @@ const styles = StyleSheet.create({
   },
   summaryAlertTime: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.35)',
+    color: Colors.outline.DEFAULT,
     fontVariant: ['tabular-nums'],
   },
   saveBtn: {
@@ -1389,5 +1448,82 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: Colors.error.DEFAULT,
+  },
+
+  // ── Session Naming Modal ──
+  nameOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    zIndex: 99,
+  },
+  nameCard: {
+    backgroundColor: Colors.surface.containerLowest,
+    borderRadius: 24,
+    padding: 24,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  nameCardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.surface.on,
+  },
+  nameCardSub: {
+    fontSize: 13,
+    color: Colors.outline.DEFAULT,
+    marginTop: -8,
+  },
+  nameInput: {
+    height: 50,
+    borderWidth: 1.5,
+    borderColor: Colors.outline.variant,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: Colors.surface.on,
+    backgroundColor: Colors.surface.containerLow,
+  },
+  nameActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  nameCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.outline.variant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.surface.onVariant,
+  },
+  nameSaveBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: Colors.primary.DEFAULT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  nameSaveText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

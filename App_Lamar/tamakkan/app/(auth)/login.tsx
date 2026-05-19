@@ -285,7 +285,7 @@ export default function LoginScreen() {
               />
               <Text style={styles.footerText}>END-TO-END ENCRYPTED AUTHENTICATION</Text>
             </View>
-            <Text style={styles.footerCopy}>© 2024 TAMAKKAN AI DRIVING ASSISTANT</Text>
+            <Text style={styles.footerCopy}>© 2026 TAMAKKAN AI DRIVING ASSISTANT</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

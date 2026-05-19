@@ -277,7 +277,7 @@ export default function ProgressScreen() {
 
       {/* Page title */}
       <View style={styles.titleRow}>
-        <Text style={styles.pageTitle}>Trip History</Text>
+        <Text style={styles.pageTitle}>History</Text>
         {trips.length > 0 && (
           <Text style={styles.tripCount}>{trips.length} trips</Text>
         )}

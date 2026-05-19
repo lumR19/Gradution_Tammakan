@@ -148,7 +148,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* App version */}
-        <Text style={styles.version}>Tamakkan v1.0.0 · SDK 54</Text>
+        <Text style={styles.version}>Tamakkan v5.0.0 · SDK 54</Text>
 
         {/* Log out */}
         <TouchableOpacity

@@ -220,9 +220,9 @@ export default function HomeScreen() {
               <View style={styles.tipGlow} />
             </View>
 
-            {/* Last Drive */}
+            {/* Recent Sessions */}
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Last Drive</Text>
+              <Text style={styles.sectionTitle}>Recent Sessions</Text>
               <TouchableOpacity
                 hitSlop={8}
                 onPress={() => router.push('/(tabs)/progress')}
@@ -234,60 +234,68 @@ export default function HomeScreen() {
             </View>
 
             {lastSession ? (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => setShowVideoModal(true)}
-                style={styles.lastSessionCard}
-              >
-                <LinearGradient
-                  colors={['#1e2e2e', '#0a1818']}
-                  style={StyleSheet.absoluteFillObject}
+              <>
+                {/* Most recent — tappable hero card with video */}
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setShowVideoModal(true)}
+                  style={styles.lastSessionCard}
                 >
-                  <View style={styles.lastSessionBgIcon}>
-                    <MaterialCommunityIcons name="car-side" size={64} color="rgba(255,255,255,0.08)" />
-                  </View>
-                </LinearGradient>
-
-                {/* Score circle — top right */}
-                <View style={[styles.lastDriveScore, { borderColor: getScoreColor(lastSession.score) }]}>
-                  <Text style={[styles.lastDriveScoreNum, { color: getScoreColor(lastSession.score) }]}>
-                    {lastSession.score.toFixed(1)}
-                  </Text>
-                  <Text style={styles.lastDriveScorePts}>/5</Text>
-                </View>
-
-                {/* Play button — center */}
-                <View style={styles.lastSessionPlayOverlay}>
-                  <View style={styles.lastSessionPlayBtn}>
-                    <MaterialCommunityIcons name="play" size={28} color="#fff" />
-                  </View>
-                </View>
-
-                {/* Info bar — bottom */}
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.85)']}
-                  style={styles.lastSessionInfoOverlay}
-                >
-                  <View style={styles.lastSessionInfoRow}>
-                    <View style={{ gap: 2 }}>
-                      <Text style={styles.lastSessionTitle}>{lastSession.title}</Text>
-                      <Text style={styles.lastSessionMeta}>
-                        {formatDate(lastSession.startedAt)} · {formatTime(lastSession.startedAt)}
-                      </Text>
+                  <LinearGradient
+                    colors={['#1e2e2e', '#0a1818']}
+                    style={StyleSheet.absoluteFillObject}
+                  >
+                    <View style={styles.lastSessionBgIcon}>
+                      <MaterialCommunityIcons name="car-side" size={64} color="rgba(255,255,255,0.08)" />
                     </View>
-                    <View style={styles.lastDriveDuration}>
-                      <MaterialCommunityIcons name="clock-outline" size={12} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.lastDriveDurationText}>
-                        {formatDuration(lastSession.durationMinutes)}
-                      </Text>
+                  </LinearGradient>
+
+                  {/* Score circle — top right */}
+                  <View style={[styles.lastDriveScore, { borderColor: getScoreColor(lastSession.score) }]}>
+                    <Text style={[styles.lastDriveScoreNum, { color: getScoreColor(lastSession.score) }]}>
+                      {lastSession.score.toFixed(1)}
+                    </Text>
+                    <Text style={styles.lastDriveScorePts}>/5</Text>
+                  </View>
+
+                  {/* Play button — center */}
+                  <View style={styles.lastSessionPlayOverlay}>
+                    <View style={styles.lastSessionPlayBtn}>
+                      <MaterialCommunityIcons name="play" size={28} color="#fff" />
                     </View>
                   </View>
-                </LinearGradient>
-              </TouchableOpacity>
+
+                  {/* Info bar — bottom */}
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.85)']}
+                    style={styles.lastSessionInfoOverlay}
+                  >
+                    <View style={styles.lastSessionInfoRow}>
+                      <View style={{ gap: 2 }}>
+                        <Text style={styles.lastSessionTitle}>{lastSession.title}</Text>
+                        <Text style={styles.lastSessionMeta}>
+                          {formatDate(lastSession.startedAt)} · {formatTime(lastSession.startedAt)}
+                        </Text>
+                      </View>
+                      <View style={styles.lastDriveDuration}>
+                        <MaterialCommunityIcons name="clock-outline" size={12} color="rgba(255,255,255,0.7)" />
+                        <Text style={styles.lastDriveDurationText}>
+                          {formatDuration(lastSession.durationMinutes)}
+                        </Text>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Older sessions below the hero card */}
+                {sessions.slice(1, 3).map((s) => (
+                  <SessionCard key={s.id} session={s} />
+                ))}
+              </>
             ) : (
               <View style={styles.emptyState}>
                 <MaterialCommunityIcons name="car-clock" size={36} color={Colors.outline.DEFAULT} />
-                <Text style={styles.emptyStateText}>No history yet — save your first session to see it here.</Text>
+                <Text style={styles.emptyStateText}>No sessions yet — save your first session to see it here.</Text>
               </View>
             )}
           </>
@@ -327,50 +335,36 @@ export default function HomeScreen() {
               <View style={styles.statCard}>
                 <View style={styles.statBadge}>
                   <Text style={[styles.statBadgeText, { color: Colors.secondary.onContainer }]}>
-                    LAST SCORE
+                    AVERAGE SCORE
                   </Text>
                 </View>
                 <View style={styles.statNumRow}>
                   <Text style={[styles.statNum, { color: Colors.primary.DEFAULT }]}>
-                    {(stats?.lastScore ?? 4.4).toFixed(1)}
+                    {sessions.length > 0 ? averageScore.toFixed(1) : '--'}
                   </Text>
-                  <Text style={styles.statUnit}>/5</Text>
+                  {sessions.length > 0 && <Text style={styles.statUnit}>/5</Text>}
                 </View>
-                <Text style={styles.statSub}>Great lane discipline</Text>
+                <Text style={styles.statSub}>
+                  {sessions.length > 0
+                    ? `${totalDrives} session${totalDrives !== 1 ? 's' : ''} total`
+                    : 'No sessions yet'}
+                </Text>
               </View>
               <View style={styles.statCard}>
-                <View style={[styles.statBadge, { backgroundColor: `${Colors.tertiary.DEFAULT}18` }]}>
-                  <Text style={[styles.statBadgeText, { color: Colors.tertiary.DEFAULT }]}>
-                    TRAINING
+                <View style={[styles.statBadge, { backgroundColor: `${Colors.error.DEFAULT}18` }]}>
+                  <Text style={[styles.statBadgeText, { color: Colors.error.DEFAULT }]}>
+                    TOTAL ALERTS
                   </Text>
                 </View>
                 <View style={styles.statNumRow}>
-                  <Text style={[styles.statNum, { color: Colors.tertiary.DEFAULT }]}>
-                    {stats?.trainingHours ?? 14.5}
+                  <Text style={[styles.statNum, { color: Colors.error.DEFAULT }]}>
+                    {totalAlerts}
                   </Text>
-                  <Text style={styles.statUnit}>hrs</Text>
                 </View>
-                <Text style={styles.statSub}>{stats?.sessionsThisWeek ?? 4} sessions this week</Text>
+                <Text style={styles.statSub}>
+                  {totalAlerts === 0 ? 'Drive safely!' : `across ${totalDrives} session${totalDrives !== 1 ? 's' : ''}`}
+                </Text>
               </View>
-            </View>
-
-            {/* Recommended Focus card */}
-            <View style={styles.focusCard}>
-              <View style={styles.focusHeader}>
-                <Text style={styles.focusTitle}>Recommended Focus</Text>
-                <MaterialCommunityIcons name="lightbulb-on" size={22} color={Colors.primary.onContainer} />
-              </View>
-              <View style={styles.focusPills}>
-                <View style={styles.focusPill}>
-                  <Text style={styles.focusPillText}>Smooth Braking</Text>
-                </View>
-                <View style={styles.focusPill}>
-                  <Text style={styles.focusPillText}>Speed Consistency</Text>
-                </View>
-              </View>
-              <Text style={styles.focusDesc}>
-                Your last 3 sessions indicate a tendency for harsh braking at intersections.
-              </Text>
             </View>
 
             {/* Recent Sessions */}
@@ -385,7 +379,10 @@ export default function HomeScreen() {
               ? sessions.slice(0, 3).map((s) => <SessionCard key={s.id} session={s} />)
               : (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>Loading sessions…</Text>
+                  <MaterialCommunityIcons name="car-clock" size={36} color={Colors.outline.DEFAULT} />
+                  <Text style={styles.emptyStateText}>
+                    No sessions yet — connect your dashcam and start your first drive!
+                  </Text>
                 </View>
               )}
           </>
