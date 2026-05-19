@@ -16,6 +16,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useAuthStore } from '@/stores/authStore';
+import { DrivingSession, MistakeType } from '@/types';
+import { getScoreLabel } from '@/utils/formatters';
+import { getTripCache, saveTripCache } from '@/utils/tripCache';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type AlertSeverity = 'danger' | 'warning' | 'safe';
@@ -41,6 +45,21 @@ const MOCK_ALERTS: { message: string; severity: AlertSeverity }[] = [
 ];
 
 const MOCK_SPEEDS = [60, 80, 80, 120, 60];
+
+const ALERT_TYPE_MAP: [string, MistakeType][] = [
+  ['braking', 'harsh_braking'],
+  ['acceleration', 'harsh_acceleration'],
+  ['lane', 'lane_departure'],
+  ['speed', 'speeding'],
+  ['distance', 'tailgating'],
+  ['drowsiness', 'drowsiness'],
+];
+function alertType(msg: string): MistakeType {
+  for (const [k, v] of ALERT_TYPE_MAP) {
+    if (msg.toLowerCase().includes(k)) return v;
+  }
+  return 'harsh_braking';
+}
 const HUD_HEIGHT = 52;
 const BANNER_H = 56;
 
@@ -77,6 +96,7 @@ export default function LiveSessionScreen() {
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
   const stopSession = useSessionStore((s) => s.stopSession);
+  const user = useAuthStore((s) => s.user);
 
   // ── State ──
   const elapsedRef = useRef(0);
@@ -200,10 +220,37 @@ export default function LiveSessionScreen() {
 
   // ── Stop handler ──
   function handleStop() {
-    Alert.alert('End Session?', 'Your session data will be saved.', [
+    Alert.alert('End Session?', 'Choose what to do with this session.', [
       { text: 'Keep Going', style: 'cancel' },
       {
-        text: 'End Session',
+        text: 'Save Session',
+        onPress: () => {
+          const uid = user?.id ?? 'u_001';
+          const scoreOut100 = Math.round(score * 20);
+          const session: DrivingSession = {
+            id: 's_' + Date.now(),
+            userId: uid,
+            title: `Session · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+            startedAt: new Date(Date.now() - elapsed * 1000).toISOString(),
+            endedAt: new Date().toISOString(),
+            durationMinutes: Math.max(1, Math.ceil(elapsed / 60)),
+            score: scoreOut100,
+            scoreLabel: getScoreLabel(scoreOut100),
+            mistakes: alertLog.map((a) => ({
+              id: a.id,
+              type: alertType(a.message),
+              label: a.message,
+              timestamp: a.timestamp,
+              severity: a.severity === 'danger' ? 'high' as const : a.severity === 'warning' ? 'medium' as const : 'low' as const,
+            })),
+          };
+          stopSession(session);
+          getTripCache(uid).then((cached) => saveTripCache(uid, [session, ...cached]));
+          router.replace('/(tabs)');
+        },
+      },
+      {
+        text: 'Discard',
         style: 'destructive',
         onPress: () => {
           stopSession();

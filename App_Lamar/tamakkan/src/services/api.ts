@@ -237,4 +237,22 @@ export async function endTrip(tripId: string): Promise<TripEndResponse | null> {
   }
 }
 
+export async function getTrips(
+  userId: string,
+  page = 1,
+  pageSize = 10,
+): Promise<{ trips: DrivingSession[]; hasMore: boolean }> {
+  try {
+    const res = await api.get<{ trips: DrivingSession[]; hasMore: boolean }>('/trips', {
+      params: { user_id: userId, page, page_size: pageSize },
+    });
+    return res.data;
+  } catch {
+    await delay(400);
+    const start = (page - 1) * pageSize;
+    const slice = MOCK_SESSIONS.slice(start, start + pageSize);
+    return { trips: slice, hasMore: start + pageSize < MOCK_SESSIONS.length };
+  }
+}
+
 export default api;

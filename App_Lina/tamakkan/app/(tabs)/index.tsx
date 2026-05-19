@@ -14,7 +14,8 @@ import Colors from '@/theme/colors';
 import AppLogo from '@/components/AppLogo';
 import { useAuthStore } from '@/stores/authStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import { getSessions, getStats, getDailyTip } from '@/services/api';
+import { getStats, getDailyTip } from '@/services/api';
+import { getTripCache } from '@/utils/tripCache';
 import ScoreRing from '@/components/features/ScoreRing';
 import { formatDate, formatDuration, getScoreColor } from '@/utils/formatters';
 import { DrivingSession } from '@/types';
@@ -57,10 +58,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!user) return;
-    getSessions(user.id).then(setSessions).catch(() => {});
+    getTripCache(user.id).then((cached) => {
+      if (cached.length > 0) setSessions(cached);
+    }).catch(() => {});
     getStats(user.id).then(setStats).catch(() => {});
     getDailyTip().then(setDailyTip).catch(() => {});
-  }, [user?.id]);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lastSession = sessions[0] ?? null;
   const currentScore = stats?.currentScore ?? 4.5;
@@ -131,59 +134,64 @@ export default function HomeScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Current Score card */}
-            <View style={styles.scoreCard}>
-              <View style={styles.scoreCardLeft}>
-                <Text style={styles.cardLabel}>CURRENT SCORE</Text>
-                <View style={styles.scoreLine}>
-                  <Text style={styles.scoreNum}>{currentScore.toFixed(1)}</Text>
-                  <Text style={styles.scoreUnit}>/5.0</Text>
+            {/* Stats — only visible once the user has at least one saved session */}
+            {sessions.length > 0 ? (
+              <>
+                {/* Current Score card */}
+                <View style={styles.scoreCard}>
+                  <View style={styles.scoreCardLeft}>
+                    <Text style={styles.cardLabel}>CURRENT SCORE</Text>
+                    <View style={styles.scoreLine}>
+                      <Text style={styles.scoreNum}>{currentScore.toFixed(1)}</Text>
+                      <Text style={styles.scoreUnit}>/5.0</Text>
+                    </View>
+                    <View style={styles.scoreTrend}>
+                      <MaterialCommunityIcons name="trending-up" size={16} color={Colors.secondary.DEFAULT} />
+                      <Text style={styles.scoreTrendText}>+{stats?.scoreChange ?? 7}% vs last week</Text>
+                    </View>
+                  </View>
+                  <ScoreRing
+                    score={currentScore}
+                    maxScore={5}
+                    size={96}
+                    strokeWidth={8}
+                    centerIcon={
+                      <MaterialCommunityIcons name="star" size={30} color={Colors.primary.DEFAULT} />
+                    }
+                  />
                 </View>
-                <View style={styles.scoreTrend}>
-                  <MaterialCommunityIcons name="trending-up" size={16} color={Colors.secondary.DEFAULT} />
-                  <Text style={styles.scoreTrendText}>+{stats?.scoreChange ?? 7}% vs last week</Text>
-                </View>
-              </View>
-              <ScoreRing
-                score={currentScore}
-                maxScore={5}
-                size={96}
-                strokeWidth={8}
-                centerIcon={
-                  <MaterialCommunityIcons name="star" size={30} color={Colors.primary.DEFAULT} />
-                }
-              />
-            </View>
 
-            {/* Mini stat cards */}
-            <View style={styles.miniCardRow}>
-              <View style={styles.miniCard}>
-                <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.error.DEFAULT}22` }]}>
-                  <MaterialCommunityIcons name="alert" size={20} color={Colors.error.DEFAULT} />
+                {/* Mini stat cards */}
+                <View style={styles.miniCardRow}>
+                  <View style={styles.miniCard}>
+                    <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.error.DEFAULT}22` }]}>
+                      <MaterialCommunityIcons name="alert" size={20} color={Colors.error.DEFAULT} />
+                    </View>
+                    <Text style={styles.miniCardLabel}>MISTAKES</Text>
+                    <Text style={styles.miniCardNum}>{stats?.totalMistakes ?? 0}</Text>
+                  </View>
+                  <View style={styles.miniCard}>
+                    <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.secondary.DEFAULT}22` }]}>
+                      <MaterialCommunityIcons name="shield-check" size={20} color={Colors.secondary.DEFAULT} />
+                    </View>
+                    <Text style={styles.miniCardLabel}>SAFE POINTS</Text>
+                    <Text style={styles.miniCardNum}>{stats?.safePoints ?? 0}</Text>
+                  </View>
                 </View>
-                <Text style={styles.miniCardLabel}>MISTAKES</Text>
-                <Text style={styles.miniCardNum}>{stats?.totalMistakes ?? 12}</Text>
-              </View>
-              <View style={styles.miniCard}>
-                <View style={[styles.miniCardIcon, { backgroundColor: `${Colors.secondary.DEFAULT}22` }]}>
-                  <MaterialCommunityIcons name="shield-check" size={20} color={Colors.secondary.DEFAULT} />
-                </View>
-                <Text style={styles.miniCardLabel}>SAFE POINTS</Text>
-                <Text style={styles.miniCardNum}>{stats?.safePoints ?? 340}</Text>
-              </View>
-            </View>
 
-            {/* Top improvement area */}
-            <View style={styles.improvementCard}>
-              <View style={styles.improvementIcon}>
-                <MaterialCommunityIcons name="home-alert" size={22} color={Colors.primary.fixed} />
-              </View>
-              <View style={styles.improvementContent}>
-                <Text style={styles.improvementLabel}>TOP IMPROVEMENT AREA</Text>
-                <Text style={styles.improvementTitle}>{stats?.topImprovementArea ?? 'Harsh Braking'}</Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={22} color="rgba(255,255,255,0.4)" />
-            </View>
+                {/* Top improvement area */}
+                <View style={styles.improvementCard}>
+                  <View style={styles.improvementIcon}>
+                    <MaterialCommunityIcons name="home-alert" size={22} color={Colors.primary.fixed} />
+                  </View>
+                  <View style={styles.improvementContent}>
+                    <Text style={styles.improvementLabel}>TOP IMPROVEMENT AREA</Text>
+                    <Text style={styles.improvementTitle}>{stats?.topImprovementArea ?? 'Harsh Braking'}</Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={22} color="rgba(255,255,255,0.4)" />
+                </View>
+              </>
+            ) : null}
 
             {/* Daily tip */}
             <View style={styles.tipCard}>
@@ -208,7 +216,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {lastSession && (
+            {lastSession ? (
               <View style={styles.lastSessionCard}>
                 <LinearGradient
                   colors={['#1e2e2e', '#0a1818']}
@@ -235,10 +243,15 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                     <View style={styles.lastSessionBadge}>
-                      <Text style={styles.lastSessionBadgeText}>{lastSession.score} pts</Text>
+                      <Text style={styles.lastSessionBadgeText}>{(lastSession.score / 20).toFixed(1)}/5</Text>
                     </View>
                   </View>
                 </LinearGradient>
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="car-clock" size={36} color={Colors.outline.DEFAULT} />
+                <Text style={styles.emptyStateText}>No history yet — save your first session to see it here.</Text>
               </View>
             )}
           </>
@@ -882,9 +895,15 @@ const styles = StyleSheet.create({
   emptyState: {
     paddingVertical: 32,
     alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.surface.containerLowest,
+    borderRadius: 20,
+    paddingHorizontal: 24,
   },
   emptyStateText: {
     fontSize: 14,
     color: Colors.outline.DEFAULT,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

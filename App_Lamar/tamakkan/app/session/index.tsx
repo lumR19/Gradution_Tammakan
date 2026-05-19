@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
 import { endTrip } from '@/services/api';
+import { getTripCache, saveTripCache } from '@/utils/tripCache';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -513,6 +514,8 @@ export default function LiveSessionScreen() {
       })),
     };
     stopSession(session);
+    const uid = user?.id ?? 'u_001';
+    getTripCache(uid).then((cached) => saveTripCache(uid, [session, ...cached]));
     setShowSummary(false);
     router.replace('/(tabs)');
   }

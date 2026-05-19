@@ -20,6 +20,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
           <Stack.Screen name="wifi-connection" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="session" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="trip/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

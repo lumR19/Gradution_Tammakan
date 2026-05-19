@@ -138,6 +138,8 @@ export default function ProfileScreen() {
         {/* Menu */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Settings</Text>
+          <MenuRow icon="cog-outline" label="App Settings" onPress={() => router.push('/settings')} />
+          <View style={styles.divider} />
           <MenuRow icon="bell-outline" label="Notifications" />
           <View style={styles.divider} />
           <MenuRow icon="shield-check-outline" label="Privacy & Security" />

@@ -105,7 +105,7 @@ function StatsCard({ stats }: { stats: TripStats }) {
         <View style={styles.statsVDivider} />
         <StatCell
           icon="alert-outline"
-          label="Events"
+          label="Alerts"
           value={String(stats.totalEvents)}
           color={stats.totalEvents > 0 ? Colors.tertiary.DEFAULT : Colors.secondary.DEFAULT}
         />
@@ -168,7 +168,7 @@ function TripCard({ session, onPress }: { session: DrivingSession; onPress: () =
                 <Text style={styles.cardMetaDot}>·</Text>
                 <MaterialCommunityIcons name="alert-outline" size={13} color={Colors.tertiary.DEFAULT} />
                 <Text style={[styles.cardMetaText, { color: Colors.tertiary.DEFAULT }]}>
-                  {session.mistakes.length} event{session.mistakes.length !== 1 ? 's' : ''}
+                  {session.mistakes.length} alert{session.mistakes.length !== 1 ? 's' : ''}
                 </Text>
               </>
             )}
@@ -189,8 +189,8 @@ function EmptyState() {
       <View style={styles.emptyIcon}>
         <MaterialCommunityIcons name="car-clock" size={48} color={Colors.primary.container} />
       </View>
-      <Text style={styles.emptyTitle}>No trips yet</Text>
-      <Text style={styles.emptySubtitle}>Complete a driving session to see your history here.</Text>
+      <Text style={styles.emptyTitle}>No history yet</Text>
+      <Text style={styles.emptySubtitle}>Start and save a driving session to see your trip history here.</Text>
     </View>
   );
 }
@@ -226,7 +226,10 @@ export default function ProgressScreen() {
         const { trips: fresh, hasMore: more } = await getTrips(userId, page, PAGE_SIZE);
         setHasMore(more);
         setTrips((prev) => {
-          const next = append ? [...prev, ...fresh] : fresh;
+          // Preserve locally-saved sessions (not returned by API) at the top
+          const freshIds = new Set(fresh.map((s) => s.id));
+          const localOnly = page === 1 ? prev.filter((s) => !freshIds.has(s.id)) : [];
+          const next = append ? [...prev, ...fresh] : [...localOnly, ...fresh];
           saveTripCache(userId, next);
           setSessions(next);
           return next;
@@ -236,16 +239,15 @@ export default function ProgressScreen() {
         fetchingRef.current = false;
       }
     },
-    [userId],
+    [userId, setSessions],
   );
 
   useEffect(() => {
     (async () => {
       await loadFromCache();
-      await fetchPage(1);
       setLoading(false);
     })();
-  }, [loadFromCache, fetchPage]);
+  }, [loadFromCache]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
