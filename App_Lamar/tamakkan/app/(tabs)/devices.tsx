@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,68 +15,128 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
 import { DashcamDevice } from '@/types';
+import { formatDate } from '@/utils/formatters';
 
-type ConnState = 'idle' | 'connecting' | 'connected';
+function DeviceCard({
+  device,
+  isActive,
+  isConnecting,
+  onPress,
+  onRemove,
+}: {
+  device: DashcamDevice;
+  isActive: boolean;
+  isConnecting: boolean;
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.deviceCard, isActive && styles.deviceCardActive]}
+      onPress={onPress}
+      activeOpacity={0.75}
+      disabled={isConnecting}
+    >
+      {/* Icon */}
+      <View style={[styles.deviceIcon, isActive && styles.deviceIconActive]}>
+        <MaterialCommunityIcons
+          name="camera"
+          size={26}
+          color={isActive ? '#fff' : Colors.primary.container}
+        />
+      </View>
 
-const STEPS: {
-  num: number;
-  title: string;
-  desc: string;
-  highlight?: string;
-  suffix?: string;
-}[] = [
-  {
-    num: 1,
-    title: 'Power On Device',
-    desc: "Plug the DashCam into your vehicle's power outlet and wait for the status LED to blink blue.",
-  },
-  {
-    num: 2,
-    title: 'Enable Wi-Fi Mode',
-    desc: 'Press the \'Wi-Fi\' button on the side of the device until you hear the "Hotspot Active" voice prompt.',
-  },
-  {
-    num: 3,
-    title: 'Join Network',
-    desc: 'Look for a Wi-Fi network named ',
-    highlight: 'Tamakkan_Cam_XXXX',
-    suffix: ' in your phone settings.',
-  },
-];
+      {/* Info */}
+      <View style={styles.deviceInfo}>
+        <View style={styles.deviceNameRow}>
+          <Text style={styles.deviceName} numberOfLines={1}>{device.name}</Text>
+          {isActive && (
+            <View style={styles.connectedBadge}>
+              <View style={styles.connectedDot} />
+              <Text style={styles.connectedBadgeText}>Connected</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.deviceMac}>{device.macAddress}</Text>
+        {device.lastConnected && (
+          <Text style={styles.deviceLastSeen}>
+            Last connected · {formatDate(device.lastConnected)}
+          </Text>
+        )}
+      </View>
+
+      {/* Right: connecting spinner OR chevron+remove */}
+      {isConnecting ? (
+        <ActivityIndicator size="small" color={Colors.primary.container} />
+      ) : (
+        <View style={styles.deviceActions}>
+          <TouchableOpacity
+            onPress={onRemove}
+            hitSlop={8}
+            style={styles.removeBtn}
+          >
+            <MaterialCommunityIcons name="close" size={16} color={Colors.outline.DEFAULT} />
+          </TouchableOpacity>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={22}
+            color={isActive ? Colors.primary.container : Colors.outline.DEFAULT}
+          />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
 
 export default function DevicesScreen() {
   const insets = useSafeAreaInsets();
-  const [connState, setConnState] = useState<ConnState>('idle');
+  const savedDevices = useSessionStore((s) => s.savedDevices);
+  const dashcamDevice = useSessionStore((s) => s.dashcamDevice);
+  const dashcamConnected = useSessionStore((s) => s.dashcamConnected);
   const setDashcamConnected = useSessionStore((s) => s.setDashcamConnected);
+  const removeSavedDevice = useSessionStore((s) => s.removeSavedDevice);
 
-  function handleConnect() {
-    if (connState !== 'idle') return;
-    setConnState('connecting');
+  const [connectingId, setConnectingId] = useState<string | null>(null);
 
-    setTimeout(() => {
-      const mockDevice: DashcamDevice = {
-        id: 'cam-001',
-        name: 'Tamakkan_Cam_A1B2',
-        macAddress: 'AA:BB:CC:DD:EE:FF',
-        isConnected: true,
-        firmwareVersion: '1.2.3',
-        lastConnected: new Date().toISOString(),
-        ssid: 'Tamakkan_Cam_A1B2',
-      };
-      setDashcamConnected(true, mockDevice);
-      setConnState('connected');
+  const handleDevicePress = async (device: DashcamDevice) => {
+    if (connectingId) return;
+    // Already connected to this device — go home
+    if (dashcamConnected && dashcamDevice?.id === device.id) {
+      router.navigate('/(tabs)');
+      return;
+    }
+    setConnectingId(device.id);
+    // Simulate reconnection (backend not ready)
+    await new Promise((r) => setTimeout(r, 1500));
+    setDashcamConnected(true, { ...device, lastConnected: new Date().toISOString() });
+    setConnectingId(null);
+    router.navigate('/(tabs)/');
+  };
 
-      setTimeout(() => {
-        router.navigate('/(tabs)');
-      }, 1000);
-    }, 2000);
-  }
+  const handleRemove = (deviceId: string, deviceName: string) => {
+    Alert.alert(
+      'Remove Device',
+      `Remove "${deviceName}" from your devices?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            if (dashcamDevice?.id === deviceId) setDashcamConnected(false);
+            removeSavedDevice(deviceId);
+          },
+        },
+      ]
+    );
+  };
 
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
+  // ── Device list view ───────────────────────────────────────────────────────
+  if (savedDevices.length > 0) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        {/* Header */}
+        <View style={styles.header}>
           <TouchableOpacity
             onPress={() => router.navigate('/(tabs)')}
             hitSlop={8}
@@ -83,7 +144,57 @@ export default function DevicesScreen() {
           >
             <MaterialCommunityIcons name="arrow-left" size={24} color={Colors.primary.container} />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>Devices</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/wifi-connection?from=devices')}
+            hitSlop={8}
+            style={styles.addBtn}
+          >
+            <MaterialCommunityIcons name="plus" size={24} color={Colors.primary.container} />
+          </TouchableOpacity>
         </View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.listScroll, { paddingBottom: insets.bottom + 120 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.sectionLabel}>MY DEVICES</Text>
+
+          {savedDevices.map((device) => (
+            <DeviceCard
+              key={device.id}
+              device={device}
+              isActive={dashcamConnected && dashcamDevice?.id === device.id}
+              isConnecting={connectingId === device.id}
+              onPress={() => handleDevicePress(device)}
+              onRemove={() => handleRemove(device.id, device.name)}
+            />
+          ))}
+
+          <Text style={styles.hintText}>
+            Tap a device to connect · Swipe × to remove
+          </Text>
+        </ScrollView>
+
+      </View>
+    );
+  }
+
+  // ── Empty / setup view (no saved devices yet) ──────────────────────────────
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.navigate('/(tabs)')}
+          hitSlop={8}
+          style={styles.backBtn}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={24} color={Colors.primary.container} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Devices</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -99,28 +210,11 @@ export default function DevicesScreen() {
           </Text>
         </View>
 
-        {/* Hero — video guide placeholder */}
+        {/* Hero icon */}
         <View style={styles.heroCard}>
-          <LinearGradient
-            colors={['#1a3535', '#0a1818']}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <View style={styles.heroBgCam}>
-            <MaterialCommunityIcons name="camera" size={96} color="rgba(255,255,255,0.06)" />
+          <View style={styles.heroIconWrap}>
+            <MaterialCommunityIcons name="cctv" size={72} color={Colors.primary.container} />
           </View>
-          <TouchableOpacity activeOpacity={0.8} style={styles.heroPlayBtn}>
-            <View style={styles.heroPlayBg} />
-            <MaterialCommunityIcons name="play" size={30} color="#fff" />
-          </TouchableOpacity>
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.6)']}
-            style={styles.heroLabelGrad}
-          >
-            <View style={styles.heroLabelPill}>
-              <MaterialCommunityIcons name="wifi" size={13} color="rgba(255,255,255,0.9)" />
-              <Text style={styles.heroLabelText}>Visual Guide: Wi-Fi Setup</Text>
-            </View>
-          </LinearGradient>
         </View>
 
         {/* Steps */}
@@ -160,54 +254,70 @@ export default function DevicesScreen() {
         </View>
       </ScrollView>
 
-      {/* Sticky bottom button */}
+      {/* Connect button */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
-          onPress={handleConnect}
-          activeOpacity={connState === 'idle' ? 0.85 : 1}
-          style={styles.connectWrap}
-          disabled={connState !== 'idle'}
+          onPress={() => router.push('/wifi-connection?from=devices')}
+          activeOpacity={0.85}
+          style={styles.startWrap}
         >
-          {connState === 'idle' && (
-            <LinearGradient
-              colors={[Colors.primary.container, Colors.secondary.DEFAULT]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.connectInner}
-            >
-              <MaterialCommunityIcons name="wifi" size={22} color="#fff" />
-              <Text style={styles.connectText}>Connect to Wi-Fi</Text>
-            </LinearGradient>
-          )}
-          {connState === 'connecting' && (
-            <View style={[styles.connectInner, styles.connectingBg]}>
-              <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.connectText}>Connecting…</Text>
-            </View>
-          )}
-          {connState === 'connected' && (
-            <View style={[styles.connectInner, styles.connectedBg]}>
-              <MaterialCommunityIcons name="check-circle" size={22} color="#fff" />
-              <Text style={styles.connectText}>Connected!</Text>
-            </View>
-          )}
+          <LinearGradient
+            colors={[Colors.primary.container, Colors.secondary.DEFAULT]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.startInner}
+          >
+            <MaterialCommunityIcons name="wifi" size={22} color="#fff" />
+            <Text style={styles.startText}>Connect to Wi-Fi</Text>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
+// ── Setup steps data ──────────────────────────────────────────────────────────
+
+const STEPS: {
+  num: number;
+  title: string;
+  desc: string;
+  highlight?: string;
+  suffix?: string;
+}[] = [
+  {
+    num: 1,
+    title: 'Power On Device',
+    desc: "Plug the DashCam into your vehicle's power outlet and wait for the status LED to blink blue.",
+  },
+  {
+    num: 2,
+    title: 'Enable Wi-Fi Mode',
+    desc: 'Press the \'Wi-Fi\' button on the side of the device until you hear the "Hotspot Active" voice prompt.',
+  },
+  {
+    num: 3,
+    title: 'Join Network',
+    desc: 'Look for a Wi-Fi network named ',
+    highlight: 'Tamakkan_Cam_XXXX',
+    suffix: ' in your phone settings.',
+  },
+];
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
   },
+
   // ── Header ──
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     height: 60,
     backgroundColor: '#fff',
     shadowColor: Colors.primary.tint,
@@ -216,11 +326,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 3,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
   backBtn: {
     width: 40,
     height: 40,
@@ -228,197 +333,262 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // ── Scroll ──
-  scroll: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    gap: 20,
-  },
-  // ── Headline ──
-  headline: {
-    gap: 8,
-  },
-  headlineTitle: {
-    fontSize: 28,
-    fontWeight: '700',
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
     color: Colors.surface.on,
   },
-  headlineSubtitle: {
-    fontSize: 16,
-    color: Colors.surface.onVariant,
-    lineHeight: 24,
-  },
-  // ── Hero card ──
-  heroCard: {
-    height: 200,
-    borderRadius: 24,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  heroBgCam: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroPlayBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  heroPlayBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  heroLabelGrad: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    paddingTop: 40,
-  },
-  heroLabelPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  heroLabelText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.92)',
-  },
-  // ── Steps ──
-  steps: {
-    gap: 12,
-  },
-  stepCard: {
-    backgroundColor: Colors.surface.containerLowest,
-    borderRadius: 24,
-    padding: 18,
-    flexDirection: 'row',
-    gap: 14,
-    alignItems: 'flex-start',
-    shadowColor: Colors.primary.tint,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 20,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: Colors.surface.containerLow,
-  },
-  stepNum: {
+  addBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.secondary.container,
+    backgroundColor: `${Colors.primary.container}18`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // ── Device list ──
+  listScroll: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    gap: 12,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.surface.onVariant,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  deviceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface.containerLowest,
+    borderRadius: 20,
+    padding: 16,
+    gap: 14,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    shadowColor: Colors.primary.tint,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  deviceCardActive: {
+    borderColor: Colors.primary.container,
+    backgroundColor: `${Colors.primary.container}0a`,
+  },
+  deviceIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: `${Colors.primary.container}18`,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  stepNumText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.secondary.onContainer,
+  deviceIconActive: {
+    backgroundColor: Colors.primary.container,
   },
-  stepBody: {
+  deviceInfo: {
     flex: 1,
-    gap: 4,
-    paddingTop: 3,
+    gap: 3,
   },
-  stepTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary.DEFAULT,
-  },
-  stepDesc: {
-    fontSize: 14,
-    color: Colors.surface.onVariant,
-    lineHeight: 20,
-  },
-  stepHighlight: {
-    fontWeight: '600',
-    color: Colors.surface.on,
-  },
-  // ── Help ──
-  helpCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface.containerLow,
-    borderRadius: 24,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.primary.fixed,
-    borderStyle: 'dashed',
-  },
-  helpLeft: {
+  deviceNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
-  helpText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.primary.DEFAULT,
-  },
-  troubleshootBtn: {
-    fontSize: 12,
+  deviceName: {
+    fontSize: 15,
     fontWeight: '600',
-    color: Colors.primary.DEFAULT,
-    letterSpacing: 0.3,
+    color: Colors.surface.on,
   },
-  // ── Bottom sticky ──
+  connectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: `${Colors.secondary.DEFAULT}20`,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  connectedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.secondary.DEFAULT,
+  },
+  connectedBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.secondary.DEFAULT,
+  },
+  deviceMac: {
+    fontSize: 11,
+    color: Colors.outline.DEFAULT,
+    fontFamily: 'monospace',
+  },
+  deviceLastSeen: {
+    fontSize: 11,
+    color: Colors.surface.onVariant,
+  },
+  deviceActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  removeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.surface.containerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hintText: {
+    fontSize: 12,
+    color: Colors.outline.DEFAULT,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+
+  // ── Bottom bar ──
   bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
-    paddingTop: 12,
-    backgroundColor: 'rgba(247,250,250,0.92)',
+    paddingTop: 16,
+    backgroundColor: Colors.background,
     borderTopWidth: 1,
-    borderTopColor: Colors.surface.container,
+    borderTopColor: Colors.outline.variant,
   },
-  connectWrap: {
+  startWrap: {
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: Colors.primary.container,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    elevation: 8,
   },
-  connectInner: {
+  startInner: {
     height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
   },
-  connectText: {
-    fontSize: 17,
+  startText: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#fff',
   },
-  connectingBg: {
-    backgroundColor: Colors.outline.DEFAULT,
+
+  // ── Setup / empty view ──
+  scroll: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    gap: 20,
   },
-  connectedBg: {
-    backgroundColor: Colors.secondary.DEFAULT,
+  headline: {
+    gap: 8,
+  },
+  headlineTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.surface.on,
+  },
+  headlineSubtitle: {
+    fontSize: 14,
+    color: Colors.surface.onVariant,
+    lineHeight: 20,
+  },
+  heroCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    height: 160,
+    backgroundColor: `${Colors.primary.container}12`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroIconWrap: {
+    width: 120,
+    height: 120,
+    borderRadius: 32,
+    backgroundColor: `${Colors.primary.container}18`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  steps: {
+    gap: 12,
+  },
+  stepCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: Colors.surface.containerLowest,
+    borderRadius: 20,
+    padding: 16,
+    gap: 14,
+    shadowColor: Colors.primary.tint,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  stepNum: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primary.container,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  stepNumText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  stepBody: {
+    flex: 1,
+    paddingTop: 2,
+    gap: 4,
+  },
+  stepTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.surface.on,
+  },
+  stepDesc: {
+    fontSize: 13,
+    color: Colors.surface.onVariant,
+    lineHeight: 19,
+  },
+  stepHighlight: {
+    fontWeight: '700',
+    color: Colors.primary.container,
+  },
+  helpCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface.containerLowest,
+    borderRadius: 16,
+    padding: 16,
+  },
+  helpLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  helpText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.surface.on,
+  },
+  troubleshootBtn: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary.container,
   },
 });
