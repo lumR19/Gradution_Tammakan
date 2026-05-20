@@ -244,14 +244,14 @@ export default function LiveSessionScreen() {
   // ── State ──
   const elapsedRef = useRef(0);
   const [elapsed, setElapsed] = useState(0);
-  const [score, setScore] = useState(4.2);
+  const [score, setScore] = useState(5.0);
   const [alertLog, setAlertLog] = useState<AlertEntry[]>([]);
   const [bannerAlert, setBannerAlert] = useState<AlertEntry | null>(null);
   const [detectedSpeed, setDetectedSpeed] = useState<number | null>(null);
   // Initialise from the persisted Settings toggle so the global setting is respected
   const [voiceEnabled, setVoiceEnabled] = useState(voiceAlertsEnabled);
   const [showSummary, setShowSummary] = useState(false);
-  const [finalScore, setFinalScore] = useState(4.2);
+  const [finalScore, setFinalScore] = useState(5.0);
   const [finalElapsed, setFinalElapsed] = useState(0);
   const [showNameModal, setShowNameModal] = useState(false);
   const [sessionNameDraft, setSessionNameDraft] = useState('');
@@ -368,11 +368,6 @@ export default function LiveSessionScreen() {
       rate: 0.9,
       pitch: 1.0,
       volume: 1.0,
-      onDone: () => {
-        if (voiceEnabledRef.current) {
-          Speech.speak(text, { language: 'en-US', rate: 0.9, pitch: 1.0, volume: 1.0 });
-        }
-      },
     });
   }, []);
 
