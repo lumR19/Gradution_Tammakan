@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -13,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
+import { startSession as apiStartSession } from '@/services/api';
 import { DashcamDevice } from '@/types';
 
 type Status = 'idle' | 'connecting' | 'connected' | 'failed';
@@ -85,11 +87,22 @@ export default function WifiConnectionScreen() {
       setDashcamConnected(true, device);
       setStatus('connected');
 
-      timerRef.current = setTimeout(() => {
+      timerRef.current = setTimeout(async () => {
         if (from === 'devices') {
           router.replace('/(tabs)/');
-        } else {
+          return;
+        }
+        try {
+          const result = await apiStartSession(device.id);
+          useSessionStore.getState().startSession(result.sessionId);
           router.replace('/session');
+        } catch {
+          Alert.alert(
+            'Session Error',
+            'Could not start a session with the device. Please try again.',
+            [{ text: 'OK' }],
+          );
+          setStatus('failed');
         }
       }, 1000);
     }, 2000);
