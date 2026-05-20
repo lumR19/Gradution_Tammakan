@@ -403,8 +403,8 @@ export default function LiveSessionScreen() {
   // ── WebSocket — Jetson real-time channel (BACKEND_SPEC.md §3) ───────────────
   // ws://<jetson-ip>:8000/ws/session/{session_id}
   useEffect(() => {
-    const sessionId = activeSessionId ?? 'default';
-    const wsUrl = `ws://${jetsonIp}:8000/ws/session/${sessionId}`;
+    if (!activeSessionId) return;
+    const wsUrl = `ws://${jetsonIp}:8000/ws/session/${activeSessionId}`;
 
     let destroyed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -422,7 +422,10 @@ export default function LiveSessionScreen() {
 
             // ── Speed-limit update ──────────────────────────────────────────
             if (data.kind === 'speed_limit') {
-              if (data.limit_kmh != null) setDetectedSpeed(data.limit_kmh);
+              if (data.limit_kmh != null) {
+                setDetectedSpeed(data.limit_kmh);
+                speakAlert(`Speed limit is ${data.limit_kmh} kilometers per hour`);
+              }
               return;
             }
 
