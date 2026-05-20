@@ -195,15 +195,15 @@ export async function connectDashcam(deviceId: string): Promise<DashcamDevice> {
   }
 }
 
-export async function startSession(deviceId: string): Promise<{ sessionId: string }> {
+export async function startSession(deviceId: string): Promise<{ session_id: string }> {
   try {
-    const res = await api.post<{ sessionId: string }>('/sessions/start', {
+    const res = await api.post<{ session_id: string }>('/sessions/start', {
       device_id: deviceId,
     });
     return res.data;
   } catch {
     await delay(600);
-    return { sessionId: 's_' + Date.now() };
+    return { session_id: 's_' + Date.now() };
   }
 }
 

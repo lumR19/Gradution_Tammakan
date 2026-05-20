@@ -94,7 +94,7 @@ export default function WifiConnectionScreen() {
         }
         try {
           const result = await apiStartSession(device.id);
-          useSessionStore.getState().startSession(result.sessionId);
+          useSessionStore.getState().startSession(result.session_id);
           router.replace('/session');
         } catch {
           Alert.alert(
