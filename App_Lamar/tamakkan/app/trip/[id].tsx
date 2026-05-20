@@ -29,19 +29,16 @@ function formatTime(iso: string): string {
 }
 
 const MISTAKE_ICONS: Record<string, IconName> = {
-  harsh_braking: 'car-brake-alert',
-  harsh_acceleration: 'speedometer',
   lane_departure: 'road-variant',
-  speeding: 'car-speed-limiter',
-  tailgating: 'car-multiple',
-  phone_use: 'cellphone',
-  drowsiness: 'sleep',
+  tailgating:     'car-multiple',
+  red_light:      'traffic-light',
+  near_miss:      'car-emergency',
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  low: Colors.tertiary.DEFAULT,
-  medium: '#c47900',
-  high: Colors.error.DEFAULT,
+  medium:   Colors.tertiary.DEFAULT,
+  high:     Colors.error.DEFAULT,
+  critical: Colors.error.DEFAULT,
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────────

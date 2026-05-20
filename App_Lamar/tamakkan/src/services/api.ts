@@ -64,8 +64,8 @@ const MOCK_SESSIONS: DrivingSession[] = [
     score: 3.8,
     scoreLabel: 'GOOD',
     mistakes: [
-      { id: 'm_001', type: 'harsh_braking', label: 'Harsh Braking', timestamp: 300, severity: 'medium' },
-      { id: 'm_002', type: 'speeding', label: 'Speeding', timestamp: 900, severity: 'low' },
+      { id: 'm_001', type: 'tailgating',     label: 'Tailgating',     timestamp: 300, severity: 'high'   },
+      { id: 'm_002', type: 'lane_departure',  label: 'Lane Departure', timestamp: 900, severity: 'medium' },
     ],
   },
   {
@@ -89,7 +89,7 @@ const MOCK_SESSIONS: DrivingSession[] = [
     score: 4.4,
     scoreLabel: 'EXCELLENT',
     mistakes: [
-      { id: 'm_003', type: 'lane_departure', label: 'Lane Departure', timestamp: 600, severity: 'low' },
+      { id: 'm_003', type: 'lane_departure', label: 'Lane Departure', timestamp: 600, severity: 'medium' },
     ],
   },
 ];
@@ -118,8 +118,8 @@ const MOCK_DEVICE: DashcamDevice = {
 const MOCK_TIP: DrivingTip = {
   id: 't_001',
   content:
-    'Maintaining a 3-second gap from the car ahead reduces harsh braking by 40%.',
-  category: 'harsh_braking',
+    'Maintaining a 3-second gap from the car ahead significantly reduces tailgating risk.',
+  category: 'tailgating',
   date: new Date().toISOString(),
 };
 
@@ -222,7 +222,7 @@ export async function stopSession(sessionId: string): Promise<DrivingSession> {
 
 export interface TripEndResponse {
   drive_score: number;
-  event_counts: Record<string, number>;  // e.g. { harsh_braking: 3, lane_departure: 2 }
+  event_counts: Record<string, number>;  // e.g. { lane_departure: 3, tailgating: 1, red_light: 1, near_miss: 0 }
   trip_duration: number;                 // seconds
   metadata?: Record<string, unknown>;
 }

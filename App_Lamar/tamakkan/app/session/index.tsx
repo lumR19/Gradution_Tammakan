@@ -29,14 +29,22 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { getScoreLabel } from '@/utils/formatters';
 import { DrivingSession, MistakeType } from '@/types';
 
-// ─── WebSocket ────────────────────────────────────────────────────────────────
-// Replace with actual Jetson device IP and port when backend is ready.
-const WS_URL = 'ws://192.168.1.100:8765';
-
-interface JetsonEvent {
-  type: 'alert';
-  message: string;       // e.g. "Lane departure warning"
-  severity: 'danger' | 'warning';
+// ─── WebSocket — spec: ws://<jetson-ip>:8000/ws/session/{session_id} ─────────
+// Shape of messages pushed by the Jetson (BACKEND_SPEC.md §3).
+interface JetsonMessage {
+  kind: 'alert' | 'speed_limit' | 'status';
+  // alert fields
+  event_type?: MistakeType;
+  subtype?: string | null;        // red_light: 'ahead' | 'ran'
+  severity?: 'medium' | 'high' | 'critical';
+  is_vru?: boolean;
+  message_en?: string;            // text the phone speaks
+  session_time_s?: number;        // seconds since session start
+  // speed_limit fields
+  limit_kmh?: number | null;
+  // status fields
+  state?: 'active' | 'ended';
+  timestamp?: number;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -44,22 +52,23 @@ type AlertSeverity = 'danger' | 'warning';
 
 interface AlertEntry {
   id: string;
+  type: MistakeType;
+  subtype?: string;
   message: string;
   severity: AlertSeverity;
-  timestamp: number;
+  timestamp: number;              // seconds since session start
 }
 
-// ─── Mock alerts — danger & warning only ─────────────────────────────────────
-const MOCK_ALERTS: { message: string; severity: AlertSeverity }[] = [
-  { message: 'Harsh braking detected', severity: 'danger' },
-  { message: 'Lane departure warning', severity: 'warning' },
-  { message: 'Following distance too close', severity: 'danger' },
-  { message: 'Speed limit exceeded in zone', severity: 'warning' },
-  { message: 'Sudden acceleration detected', severity: 'warning' },
-  { message: 'Possible drowsiness detected', severity: 'danger' },
+// ─── Mock alerts (real taxonomy only — used while backend is not yet live) ───
+const MOCK_ALERTS: { type: MistakeType; subtype?: string; message: string; severity: AlertSeverity }[] = [
+  { type: 'lane_departure',  message: 'Lane departure detected — stay in your lane',         severity: 'warning' },
+  { type: 'tailgating',      message: 'Following too closely — increase your distance',       severity: 'danger'  },
+  { type: 'red_light',       subtype: 'ahead', message: 'Red light ahead — prepare to stop', severity: 'warning' },
+  { type: 'near_miss',       message: 'Near miss detected — reduce speed immediately',        severity: 'danger'  },
+  { type: 'red_light',       subtype: 'ran',   message: 'You passed a red light',             severity: 'danger'  },
+  { type: 'tailgating',      message: 'Keep a safe following distance',                       severity: 'danger'  },
 ];
 
-const MOCK_SPEEDS = [60, 80, 80, 120, 60];
 const HUD_HEIGHT = 52;
 const BANNER_H = 64;
 const DASH_CYCLE = 80; // dash height + gap
@@ -82,19 +91,24 @@ function formatTime(secs: number) {
   return `${pad2(Math.floor(secs / 60))}:${pad2(secs % 60)}`;
 }
 
-const ALERT_TYPE_MAP: [string, MistakeType][] = [
-  ['braking', 'harsh_braking'],
-  ['acceleration', 'harsh_acceleration'],
-  ['lane', 'lane_departure'],
-  ['speed', 'speeding'],
-  ['distance', 'tailgating'],
-  ['drowsiness', 'drowsiness'],
-];
-function alertType(msg: string): MistakeType {
-  for (const [k, v] of ALERT_TYPE_MAP) {
-    if (msg.toLowerCase().includes(k)) return v;
+// Score penalties per spec (BACKEND_SPEC.md §6.1)
+function scorePenalty(type: MistakeType, subtype?: string): number {
+  switch (type) {
+    case 'near_miss':      return -1.0;
+    case 'red_light':      return subtype === 'ran' ? -1.0 : 0;
+    case 'tailgating':     return -0.5;
+    case 'lane_departure': return -0.4;
   }
-  return 'harsh_braking';
+}
+
+// Human-readable label per event type + subtype
+function eventLabel(type: MistakeType, subtype?: string): string {
+  switch (type) {
+    case 'lane_departure': return 'Lane Departure';
+    case 'tailgating':     return 'Tailgating';
+    case 'red_light':      return subtype === 'ran' ? 'Ran Red Light' : 'Red Light Ahead';
+    case 'near_miss':      return 'Near Miss';
+  }
 }
 
 // ─── Top-down car (realistic sedan) ──────────────────────────────────────────
@@ -234,6 +248,7 @@ export default function LiveSessionScreen() {
   const activeSessionId  = useSessionStore((s) => s.activeSessionId);
   const user = useAuthStore((s) => s.user);
   const voiceAlertsEnabled = useSettingsStore((s) => s.voiceAlertsEnabled);
+  const jetsonIp           = useSettingsStore((s) => s.jetsonIp);
 
   // ── State ──
   const elapsedRef = useRef(0);
@@ -301,7 +316,6 @@ export default function LiveSessionScreen() {
 
   // ── Refs for cycling ──
   const alertIndexRef = useRef(0);
-  const speedIndexRef = useRef(0);
 
   // ── Layout ──
   const bannerTop = insets.top + HUD_HEIGHT + 10;
@@ -400,14 +414,16 @@ export default function LiveSessionScreen() {
       alertIndexRef.current += 1;
       const entry: AlertEntry = {
         id: String(Date.now()),
+        type: mock.type,
+        subtype: mock.subtype,
         message: mock.message,
         severity: mock.severity,
         timestamp: elapsedRef.current,
       };
       setAlertLog((prev) => [entry, ...prev].slice(0, 20));
       setScore((prev) => {
-        const delta = entry.severity === 'danger' ? -0.1 : -0.04;
-        return Math.max(1.5, Math.min(5.0, parseFloat((prev + delta).toFixed(1))));
+        const delta = scorePenalty(entry.type, entry.subtype);
+        return Math.max(0, Math.min(5.0, parseFloat((prev + delta).toFixed(2))));
       });
       showBanner(entry);
       speakAlert(entry.message);
@@ -417,60 +433,73 @@ export default function LiveSessionScreen() {
     return () => { clearTimeout(firstId); clearInterval(id); };
   }, [showBanner, speakAlert]);
 
-  // ── Speed cycling ──
-  useEffect(() => {
-    const id = setInterval(() => {
-      speedIndexRef.current = (speedIndexRef.current + 1) % MOCK_SPEEDS.length;
-      setDetectedSpeed(MOCK_SPEEDS[speedIndexRef.current]);
-    }, 9000);
-    return () => clearInterval(id);
-  }, []);
+  // Speed limit is driven by WS speed_limit messages; no mock cycling needed.
 
   // ── Cleanup ──
   useEffect(() => {
     return () => { if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current); };
   }, []);
 
-  // ── WebSocket — Jetson device events ──────────────────────────────────────
-  // Not active until WS_URL points to a live backend.
+  // ── WebSocket — Jetson real-time channel (BACKEND_SPEC.md §3) ───────────────
+  // ws://<jetson-ip>:8000/ws/session/{session_id}
   useEffect(() => {
+    const sessionId = activeSessionId ?? 'default';
+    const wsUrl = `ws://${jetsonIp}:8000/ws/session/${sessionId}`;
+
     let destroyed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     function connect() {
       if (destroyed) return;
       try {
-        const ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onmessage = (evt) => {
           if (!sessionActiveRef.current) return;
           try {
-            const data: JetsonEvent = JSON.parse(evt.data as string);
-            if (data.type !== 'alert') return;
+            const data: JetsonMessage = JSON.parse(evt.data as string);
+
+            // ── Speed-limit update ──────────────────────────────────────────
+            if (data.kind === 'speed_limit') {
+              if (data.limit_kmh != null) setDetectedSpeed(data.limit_kmh);
+              return;
+            }
+
+            // ── Session status ──────────────────────────────────────────────
+            if (data.kind === 'status') return;   // reserved for future use
+
+            // ── Alert ───────────────────────────────────────────────────────
+            if (data.kind !== 'alert' || !data.event_type || !data.message_en) return;
+
+            const dispSeverity: AlertSeverity =
+              data.severity === 'medium' ? 'warning' : 'danger';
+
             const entry: AlertEntry = {
               id: String(Date.now()),
-              message: data.message,
-              severity: data.severity,
-              timestamp: elapsedRef.current,
+              type: data.event_type,
+              subtype: data.subtype ?? undefined,
+              message: data.message_en,
+              severity: dispSeverity,
+              timestamp: Math.round(data.session_time_s ?? elapsedRef.current),
             };
             setAlertLog((prev) => [entry, ...prev].slice(0, 20));
             setScore((prev) => {
-              const delta = entry.severity === 'danger' ? -0.1 : -0.04;
-              return Math.max(1.5, Math.min(5.0, parseFloat((prev + delta).toFixed(1))));
+              const delta = scorePenalty(entry.type, entry.subtype);
+              return Math.max(0, Math.min(5.0, parseFloat((prev + delta).toFixed(2))));
             });
             showBanner(entry);
             speakAlert(entry.message);
           } catch { /* ignore malformed frames */ }
         };
 
-        ws.onerror = () => { /* silent — backend not live yet */ };
+        ws.onerror = () => { /* silent — Jetson not yet connected */ };
 
         ws.onclose = () => {
           wsRef.current = null;
           if (!destroyed) reconnectTimer = setTimeout(connect, 4000);
         };
-      } catch { /* WebSocket unavailable */ }
+      } catch { /* WebSocket constructor unavailable */ }
     }
 
     connect();
@@ -481,7 +510,7 @@ export default function LiveSessionScreen() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [showBanner, speakAlert]);
+  }, [showBanner, speakAlert, jetsonIp, activeSessionId]);
 
   // ── Stop handler — freezes session immediately, then calls POST /trips/end ──
   function handleStop() {
@@ -523,10 +552,11 @@ export default function LiveSessionScreen() {
       scoreLabel: getScoreLabel(finalScore),
       mistakes: alertLog.map((a) => ({
         id: a.id,
-        type: alertType(a.message),
-        label: a.message,
+        type: a.type,
+        label: eventLabel(a.type, a.subtype),
         timestamp: a.timestamp,
         severity: a.severity === 'danger' ? 'high' as const : 'medium' as const,
+        subtype: a.subtype,
       })),
     };
     stopSession(session);

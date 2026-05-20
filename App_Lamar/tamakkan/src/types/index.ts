@@ -12,21 +12,23 @@ export interface User {
 
 export type ScoreLabel = 'EXCELLENT' | 'GOOD' | 'IMPROVING' | 'NEEDS WORK';
 
+// Only what the Jetson's sensors can actually detect (see BACKEND_SPEC.md §2).
+// harsh_braking / harsh_acceleration / speeding / phone_use / drowsiness removed —
+// no IMU, no driver-facing camera, no vehicle-speed source.
 export type MistakeType =
-  | 'harsh_braking'
-  | 'harsh_acceleration'
   | 'lane_departure'
-  | 'speeding'
   | 'tailgating'
-  | 'phone_use'
-  | 'drowsiness';
+  | 'red_light'
+  | 'near_miss';
 
 export interface Mistake {
   id: string;
   type: MistakeType;
   label: string;
-  timestamp: number;
-  severity: 'low' | 'medium' | 'high';
+  timestamp: number;                          // seconds since session start
+  severity: 'medium' | 'high' | 'critical';
+  subtype?: string;                           // red_light: 'ahead' | 'ran'
+  is_vru?: boolean;                           // near_miss: pedestrian/VRU flag
 }
 
 export interface DrivingSession {
