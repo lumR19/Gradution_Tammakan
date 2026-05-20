@@ -23,10 +23,9 @@ import ScoreRing from '@/components/features/ScoreRing';
 import { formatDate, formatDuration, getScoreColor } from '@/utils/formatters';
 import { DrivingSession } from '@/types';
 
-const severityColor = (s: 'low' | 'medium' | 'high') =>
-  s === 'high' ? Colors.error.DEFAULT
-  : s === 'medium' ? Colors.tertiary.DEFAULT
-  : Colors.secondary.DEFAULT;
+const severityColor = (s: 'medium' | 'high' | 'critical') =>
+  s === 'high' || s === 'critical' ? Colors.error.DEFAULT
+  : Colors.tertiary.DEFAULT;
 
 const formatMistakeTime = (sec: number) => {
   const m = Math.floor(sec / 60);

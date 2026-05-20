@@ -8,12 +8,12 @@ import {
   DrivingTip,
   AuthResponse,
 } from '../types';
+import { useSettingsStore } from '../stores/settingsStore';
 
-// Swap this URL for the Jetson Orin NX address when the backend is ready
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.4.1:8000';
-
+// Base URL is overridden per-request from useSettingsStore.jetsonIp so that
+// REST and WebSocket always point to the same Jetson (one knob, not two).
 const api: AxiosInstance = axios.create({
-  baseURL: BASE_URL,
+  baseURL: 'http://192.168.1.137:8000', // overridden in interceptor below
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -25,6 +25,9 @@ export function setAuthToken(token: string | null) {
 }
 
 api.interceptors.request.use((config) => {
+  // One knob: REST base URL always matches the WS jetsonIp from Settings.
+  const { jetsonIp } = useSettingsStore.getState();
+  config.baseURL = `http://${jetsonIp}:8000`;
   if (_authToken) {
     config.headers.Authorization = `Bearer ${_authToken}`;
   }
@@ -204,35 +207,35 @@ export async function startSession(deviceId: string): Promise<{ sessionId: strin
   }
 }
 
-export async function stopSession(sessionId: string): Promise<DrivingSession> {
-  try {
-    const res = await api.post<DrivingSession>(`/sessions/${sessionId}/stop`);
-    return res.data;
-  } catch {
-    await delay(800);
-    return {
-      ...MOCK_SESSIONS[0],
-      id: sessionId,
-      endedAt: new Date().toISOString(),
-    };
-  }
+// ─── Session stop — real backend (BACKEND_SPEC.md §5, §6) ────────────────────
+
+export interface SessionEventDTO {
+  event_type: 'lane_departure' | 'tailgating' | 'red_light' | 'near_miss';
+  subtype: 'ahead' | 'ran' | null;
+  severity: 'medium' | 'high' | 'critical';
+  is_vru: boolean;
+  session_time_s: number;
+  timestamp: number;
 }
 
-// ─── Trip End ─────────────────────────────────────────────────────────────────
-
-export interface TripEndResponse {
-  drive_score: number;
-  event_counts: Record<string, number>;  // e.g. { lane_departure: 3, tailgating: 1, red_light: 1, near_miss: 0 }
-  trip_duration: number;                 // seconds
-  metadata?: Record<string, unknown>;
+export interface SessionSummary {
+  session_id: string;
+  started_at: string;
+  ended_at: string;
+  duration_seconds: number;
+  score: number;
+  score_label: 'EXCELLENT' | 'GOOD' | 'IMPROVING' | 'NEEDS WORK';
+  event_counts: Record<string, number>;
+  events: SessionEventDTO[];
+  metadata: { speed_limits_seen?: number[]; model_fps_avg?: number };
 }
 
-export async function endTrip(tripId: string): Promise<TripEndResponse | null> {
+export async function stopSession(sessionId: string): Promise<SessionSummary | null> {
   try {
-    const res = await api.post<TripEndResponse>('/trips/end', { trip_id: tripId });
+    const res = await api.post<SessionSummary>(`/sessions/${sessionId}/stop`);
     return res.data;
   } catch {
-    // Backend not implemented yet — caller falls back to local session data
+    // Backend unreachable — caller falls back to local state.
     return null;
   }
 }

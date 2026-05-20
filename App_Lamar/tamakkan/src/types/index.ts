@@ -27,7 +27,7 @@ export interface Mistake {
   label: string;
   timestamp: number;                          // seconds since session start
   severity: 'medium' | 'high' | 'critical';
-  subtype?: string;                           // red_light: 'ahead' | 'ran'
+  subtype?: string | null;                    // red_light: 'ahead' | 'ran'
   is_vru?: boolean;                           // near_miss: pedestrian/VRU flag
 }
 

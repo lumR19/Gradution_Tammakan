@@ -13,7 +13,7 @@ export interface AppSettings {
 const DEFAULTS: AppSettings = {
   voiceAlertsEnabled: true,
   sensitivity: 50,
-  jetsonIp: '192.168.4.1',
+  jetsonIp: '192.168.1.137',
   hapticEnabled: true,
 };
 

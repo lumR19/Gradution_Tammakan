@@ -20,7 +20,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
-import { endTrip } from '@/services/api';
+import { stopSession as callStopSession, SessionSummary, SessionEventDTO } from '@/services/api';
 import { getTripCache, saveTripCache } from '@/utils/tripCache';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
@@ -59,15 +59,6 @@ interface AlertEntry {
   timestamp: number;              // seconds since session start
 }
 
-// ─── Mock alerts (real taxonomy only — used while backend is not yet live) ───
-const MOCK_ALERTS: { type: MistakeType; subtype?: string; message: string; severity: AlertSeverity }[] = [
-  { type: 'lane_departure',  message: 'Lane departure detected — stay in your lane',         severity: 'warning' },
-  { type: 'tailgating',      message: 'Following too closely — increase your distance',       severity: 'danger'  },
-  { type: 'red_light',       subtype: 'ahead', message: 'Red light ahead — prepare to stop', severity: 'warning' },
-  { type: 'near_miss',       message: 'Near miss detected — reduce speed immediately',        severity: 'danger'  },
-  { type: 'red_light',       subtype: 'ran',   message: 'You passed a red light',             severity: 'danger'  },
-  { type: 'tailgating',      message: 'Keep a safe following distance',                       severity: 'danger'  },
-];
 
 const HUD_HEIGHT = 52;
 const BANNER_H = 64;
@@ -256,7 +247,7 @@ export default function LiveSessionScreen() {
   const [score, setScore] = useState(4.2);
   const [alertLog, setAlertLog] = useState<AlertEntry[]>([]);
   const [bannerAlert, setBannerAlert] = useState<AlertEntry | null>(null);
-  const [detectedSpeed, setDetectedSpeed] = useState(60);
+  const [detectedSpeed, setDetectedSpeed] = useState<number | null>(null);
   // Initialise from the persisted Settings toggle so the global setting is respected
   const [voiceEnabled, setVoiceEnabled] = useState(voiceAlertsEnabled);
   const [showSummary, setShowSummary] = useState(false);
@@ -264,6 +255,7 @@ export default function LiveSessionScreen() {
   const [finalElapsed, setFinalElapsed] = useState(0);
   const [showNameModal, setShowNameModal] = useState(false);
   const [sessionNameDraft, setSessionNameDraft] = useState('');
+  const [finalEvents, setFinalEvents] = useState<SessionEventDTO[]>([]);
 
   // ── Layout constants (needed before refs for Animated.Value init) ──
   const availH     = screenH - insets.top - insets.bottom - HUD_HEIGHT;
@@ -314,8 +306,6 @@ export default function LiveSessionScreen() {
     }),
   ).current;
 
-  // ── Refs for cycling ──
-  const alertIndexRef = useRef(0);
 
   // ── Layout ──
   const bannerTop = insets.top + HUD_HEIGHT + 10;
@@ -406,32 +396,6 @@ export default function LiveSessionScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Alert cycling (danger + warning only) ──
-  useEffect(() => {
-    function fire() {
-      if (!sessionActiveRef.current) return;
-      const mock = MOCK_ALERTS[alertIndexRef.current % MOCK_ALERTS.length];
-      alertIndexRef.current += 1;
-      const entry: AlertEntry = {
-        id: String(Date.now()),
-        type: mock.type,
-        subtype: mock.subtype,
-        message: mock.message,
-        severity: mock.severity,
-        timestamp: elapsedRef.current,
-      };
-      setAlertLog((prev) => [entry, ...prev].slice(0, 20));
-      setScore((prev) => {
-        const delta = scorePenalty(entry.type, entry.subtype);
-        return Math.max(0, Math.min(5.0, parseFloat((prev + delta).toFixed(2))));
-      });
-      showBanner(entry);
-      speakAlert(entry.message);
-    }
-    const firstId = setTimeout(fire, 1800);
-    const id = setInterval(fire, 4500);
-    return () => { clearTimeout(firstId); clearInterval(id); };
-  }, [showBanner, speakAlert]);
 
   // Speed limit is driven by WS speed_limit messages; no mock cycling needed.
 
@@ -523,12 +487,13 @@ export default function LiveSessionScreen() {
     setFinalElapsed(snapshotElapsed);
     setShowSummary(true);
 
-    // POST /trips/end — non-blocking; updates summary if backend responds
+    // POST /sessions/{id}/stop — non-blocking; updates summary when Jetson responds
     const tripId = activeSessionId ?? ('s_' + Date.now());
-    endTrip(tripId).then((result) => {
-      if (!result) return;            // backend not ready, keep local data
-      setFinalScore(result.drive_score);
-      if (result.trip_duration) setFinalElapsed(result.trip_duration);
+    callStopSession(tripId).then((summary) => {
+      if (!summary) return;           // Jetson unreachable, keep local snapshot
+      setFinalScore(summary.score);
+      setFinalElapsed(summary.duration_seconds);
+      setFinalEvents(summary.events);
     }).catch(() => {});
   }
 
@@ -550,14 +515,24 @@ export default function LiveSessionScreen() {
       durationMinutes: Math.max(1, Math.ceil(finalElapsed / 60)),
       score: finalScore,
       scoreLabel: getScoreLabel(finalScore),
-      mistakes: alertLog.map((a) => ({
-        id: a.id,
-        type: a.type,
-        label: eventLabel(a.type, a.subtype),
-        timestamp: a.timestamp,
-        severity: a.severity === 'danger' ? 'high' as const : 'medium' as const,
-        subtype: a.subtype,
-      })),
+      mistakes: finalEvents.length > 0
+        ? finalEvents.map((e, idx) => ({
+            id: `${e.event_type}_${idx}_${e.timestamp}`,
+            type: e.event_type,
+            label: eventLabel(e.event_type, e.subtype ?? undefined),
+            timestamp: Math.round(e.session_time_s),
+            severity: e.severity,
+            subtype: e.subtype,
+            is_vru: e.is_vru,
+          }))
+        : alertLog.map((a) => ({
+            id: a.id,
+            type: a.type,
+            label: eventLabel(a.type, a.subtype ?? undefined),
+            timestamp: a.timestamp,
+            severity: a.severity === 'danger' ? 'high' as const : 'medium' as const,
+            subtype: a.subtype,
+          })),
     };
     stopSession(session);
     const uid = user?.id ?? 'u_001';
@@ -665,7 +640,7 @@ export default function LiveSessionScreen() {
         {/* Speed sign — bottom-left */}
         <View style={styles.speedWrap}>
           <View style={styles.speedSign}>
-            <Text style={styles.speedNum}>{detectedSpeed}</Text>
+            <Text style={styles.speedNum}>{detectedSpeed ?? '—'}</Text>
             <Text style={styles.speedUnit}>km/h</Text>
           </View>
           <View style={styles.detectedTag}>
