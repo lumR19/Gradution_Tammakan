@@ -272,6 +272,7 @@ export default function LiveSessionScreen() {
   const wsRef            = useRef<WebSocket | null>(null);
   const voiceEnabledRef  = useRef(voiceAlertsEnabled);
   const sessionActiveRef = useRef(true);   // flipped to false the moment STOP is pressed
+  const sessionEndedRef  = useRef(false);  // set when backend sends status: ended
 
   // ── Panel drag (height-based — shrinks downward, no gap ever) ──
   const panDragStart   = useRef(initPanelH);
@@ -431,7 +432,10 @@ export default function LiveSessionScreen() {
             }
 
             // ── Session status ──────────────────────────────────────────────
-            if (data.kind === 'status') return;   // reserved for future use
+            if (data.kind === 'status') {
+              if (data.state === 'ended') sessionEndedRef.current = true;
+              return;
+            }
 
             // ── Alert ───────────────────────────────────────────────────────
             if (data.kind !== 'alert' || !data.event_type || !data.message_en) return;
@@ -445,7 +449,7 @@ export default function LiveSessionScreen() {
               subtype: data.subtype ?? undefined,
               message: data.message_en,
               severity: dispSeverity,
-              timestamp: Math.round(data.session_time_s ?? elapsedRef.current),
+              timestamp: Math.round(data.session_time_s ?? 0),
             };
             setAlertLog((prev) => [entry, ...prev].slice(0, 20));
             setScore((prev) => {
@@ -461,7 +465,9 @@ export default function LiveSessionScreen() {
 
         ws.onclose = () => {
           wsRef.current = null;
-          if (!destroyed) reconnectTimer = setTimeout(connect, 4000);
+          if (!destroyed && sessionActiveRef.current && !sessionEndedRef.current) {
+            reconnectTimer = setTimeout(connect, 4000);
+          }
         };
       } catch { /* WebSocket constructor unavailable */ }
     }
@@ -470,6 +476,7 @@ export default function LiveSessionScreen() {
 
     return () => {
       destroyed = true;
+      sessionEndedRef.current = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       wsRef.current?.close();
       wsRef.current = null;
