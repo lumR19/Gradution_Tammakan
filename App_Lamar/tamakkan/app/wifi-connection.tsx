@@ -14,7 +14,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useAuthStore } from '@/stores/authStore';
 import { startSession as apiStartSession } from '@/services/api';
+import { upsertDevice } from '@/services/supabaseService';
 import { DashcamDevice } from '@/types';
 
 type Status = 'idle' | 'connecting' | 'connected' | 'failed';
@@ -58,6 +60,7 @@ export default function WifiConnectionScreen() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const addSavedDevice = useSessionStore((s) => s.addSavedDevice);
   const setDashcamConnected = useSessionStore((s) => s.setDashcamConnected);
+  const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     return () => {
@@ -86,6 +89,11 @@ export default function WifiConnectionScreen() {
       addSavedDevice(device);
       setDashcamConnected(true, device);
       setStatus('connected');
+
+      // Persist device to Supabase so it survives app restarts
+      if (user?.id) {
+        upsertDevice(user.id, device).catch(() => {});
+      }
 
       timerRef.current = setTimeout(async () => {
         if (from === 'devices') {

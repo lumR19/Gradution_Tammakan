@@ -18,10 +18,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import AppLogo from '@/components/AppLogo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/stores/authStore';
+import { signUp as supabaseSignUp } from '@/services/supabaseService';
 import { validateSaudiId, validateSaudiPhone } from '@/utils/validators';
-import { User } from '@/types';
 
 const formatDob = (raw: string) => {
   const d = raw.replace(/\D/g, '').slice(0, 8);
@@ -41,6 +40,7 @@ type FieldKey =
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
+  const storeLogin = useAuthStore((s) => s.login);
   const [focused, setFocused] = useState<FieldKey | null>(null);
   const [showPass, setShowPass] = useState(false);
   const [agreed, setAgreed] = useState(false);
@@ -83,23 +83,26 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 800));
-      const mockUser: User = {
-        id: 'u_' + Date.now(),
-        name: `${firstName.trim()} ${lastName.trim()}`,
+      const { user, token } = await supabaseSignUp({
         nationalId: idNumber,
-        phone: phone ? `+966${phone}` : '+966500000000',
-        userType: 'individual',
-        joinedAt: new Date().toISOString(),
-      };
-      await AsyncStorage.setItem('mock_registered_user', JSON.stringify(mockUser));
-      Alert.alert(
-        'Account Created!',
-        'Your account has been created successfully. Please log in to continue.',
-        [{ text: 'Log In', onPress: () => router.replace('/(auth)/login') }]
-      );
-    } catch {
-      setError('Sign-up failed. Please try again.');
+        password,
+        fullName: `${firstName.trim()} ${lastName.trim()}`,
+        email: email.trim() || undefined,
+        phone: phone ? `+966${phone}` : undefined,
+        dob: dob || undefined,
+      });
+      if (token) {
+        storeLogin(user, token);
+        router.replace('/(tabs)');
+      } else {
+        Alert.alert(
+          'Account Created!',
+          'Your account has been created. Please log in to continue.',
+          [{ text: 'Log In', onPress: () => router.replace('/(auth)/login') }],
+        );
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Sign-up failed. Please try again.');
     } finally {
       setLoading(false);
     }

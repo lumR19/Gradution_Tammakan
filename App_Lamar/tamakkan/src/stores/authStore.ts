@@ -3,9 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, UserType } from '../types';
 import { setAuthToken } from '../services/api';
+import { supabase } from '../lib/supabase';
+import { getUserProfile, signOut as supabaseSignOut } from '../services/supabaseService';
 
 const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
+const USER_KEY  = 'auth_user';
 
 interface AuthState {
   user: User | null;
@@ -28,28 +30,43 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
 
   initialize: async () => {
+    // 1. Try restoring from Supabase persisted session (AsyncStorage under the hood)
     try {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const user = await getUserProfile(session.user.id);
+        if (user) {
+          setAuthToken(session.access_token);
+          // Keep SecureStore in sync for the API interceptor fallback
+          SecureStore.setItemAsync(TOKEN_KEY, session.access_token).catch(() => {});
+          AsyncStorage.setItem(USER_KEY, JSON.stringify(user)).catch(() => {});
+          set({ user, token: session.access_token, isAuthenticated: true, userType: user.userType });
+          return;
+        }
+      }
+    } catch { /* network down — fall through to local cache */ }
+
+    // 2. Fallback: SecureStore / AsyncStorage from a previous session
+    try {
+      const token    = await SecureStore.getItemAsync(TOKEN_KEY);
       const userJson = await AsyncStorage.getItem(USER_KEY);
       if (token && userJson) {
         const user: User = JSON.parse(userJson);
         setAuthToken(token);
         set({ user, token, isAuthenticated: true, userType: user.userType });
       }
-    } catch {
-      // proceed unauthenticated
-    }
+    } catch { /* proceed unauthenticated */ }
   },
 
   login: (user, token) => {
     setAuthToken(token);
-    // Fire-and-forget — state is set immediately; storage persists for next launch
     SecureStore.setItemAsync(TOKEN_KEY, token).catch(() => {});
     AsyncStorage.setItem(USER_KEY, JSON.stringify(user)).catch(() => {});
     set({ user, token, isAuthenticated: true, userType: user.userType });
   },
 
   logout: () => {
+    supabaseSignOut().catch(() => {});
     setAuthToken(null);
     SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
     AsyncStorage.removeItem(USER_KEY).catch(() => {});
@@ -57,5 +74,5 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   setUserType: (userType) => set({ userType }),
-  setLoading: (isLoading) => set({ isLoading }),
+  setLoading:  (isLoading) => set({ isLoading }),
 }));

@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
 import { stopSession as callStopSession, SessionSummary, SessionEventDTO } from '@/services/api';
+import { saveSessionToDb, uuidv4 } from '@/services/supabaseService';
 import { getTripCache, saveTripCache } from '@/utils/tripCache';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
@@ -237,6 +238,7 @@ export default function LiveSessionScreen() {
   const { height: screenH } = useWindowDimensions();
   const stopSession      = useSessionStore((s) => s.stopSession);
   const activeSessionId  = useSessionStore((s) => s.activeSessionId);
+  const dashcamDevice    = useSessionStore((s) => s.dashcamDevice);
   const user = useAuthStore((s) => s.user);
   const voiceAlertsEnabled = useSettingsStore((s) => s.voiceAlertsEnabled);
   const jetsonIp           = useSettingsStore((s) => s.jetsonIp);
@@ -512,7 +514,7 @@ export default function LiveSessionScreen() {
     const title = sessionNameDraft.trim() ||
       `Session · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
     const session: DrivingSession = {
-      id: 's_' + Date.now(),
+      id: uuidv4(),
       userId: user?.id ?? 'u_001',
       title,
       startedAt: new Date(Date.now() - finalElapsed * 1000).toISOString(),
@@ -542,6 +544,17 @@ export default function LiveSessionScreen() {
     stopSession(session);
     const uid = user?.id ?? 'u_001';
     getTripCache(uid).then((cached) => saveTripCache(uid, [session, ...cached]));
+
+    // Persist to Supabase — fire-and-forget so the UI never blocks
+    if (uid !== 'u_001') {
+      saveSessionToDb(
+        session,
+        uid,
+        dashcamDevice?.id,
+        finalEvents.length > 0 ? finalEvents : undefined,
+      ).catch(() => {});
+    }
+
     setShowNameModal(false);
     setShowSummary(false);
     router.replace('/(tabs)');

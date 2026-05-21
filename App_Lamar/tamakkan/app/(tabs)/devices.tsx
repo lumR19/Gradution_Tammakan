@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/theme/colors';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useAuthStore } from '@/stores/authStore';
+import { getDevices } from '@/services/supabaseService';
 import { DashcamDevice } from '@/types';
 import { formatDate } from '@/utils/formatters';
 
@@ -95,8 +97,18 @@ export default function DevicesScreen() {
   const dashcamConnected = useSessionStore((s) => s.dashcamConnected);
   const setDashcamConnected = useSessionStore((s) => s.setDashcamConnected);
   const removeSavedDevice = useSessionStore((s) => s.removeSavedDevice);
+  const addSavedDevice = useSessionStore((s) => s.addSavedDevice);
+  const user = useAuthStore((s) => s.user);
 
   const [connectingId, setConnectingId] = useState<string | null>(null);
+
+  // Load previously paired devices from Supabase on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    getDevices(user.id).then((devices) => {
+      devices.forEach((d) => addSavedDevice(d));
+    }).catch(() => {});
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDevicePress = async (device: DashcamDevice) => {
     if (connectingId) return;
