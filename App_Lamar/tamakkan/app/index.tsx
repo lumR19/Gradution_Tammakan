@@ -39,6 +39,8 @@ export default function Index() {
     });
   }, []);
 
+  // Auth check runs after the animation finishes so the user never sees a blank
+  // redirect — the logo stays visible for the full zoom-out before anything changes.
   const navigate = async () => {
     await useAuthStore.getState().initialize();
     const isAuthenticated = useAuthStore.getState().isAuthenticated;

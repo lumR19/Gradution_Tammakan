@@ -21,6 +21,8 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // ── Custom slider ──────────────────────────────────────────────────────────────
 
+// Custom slider because Expo Go on Android doesn't ship the RN community slider at SDK 54.
+// trackWidth is measured via onLayout because we can't know the rendered width at paint time.
 function SensitivitySlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [trackWidth, setTrackWidth] = useState(0);
   const pct = value / 100;
@@ -131,10 +133,13 @@ export default function SettingsScreen() {
     if (!loaded) load();
   }, [loaded, load]);
 
+  // Only sync the draft from the store once loading is complete — prevents overwriting
+  // a partially-typed address if the component re-renders before the store finishes.
   useEffect(() => {
     if (loaded) setIpDraft(jetsonIp);
   }, [loaded, jetsonIp]);
 
+  // Skips the update when nothing changed so we don't write AsyncStorage on every blur.
   function saveIp() {
     const trimmed = ipDraft.trim();
     if (trimmed !== jetsonIp) update({ jetsonIp: trimmed });

@@ -34,6 +34,8 @@ export default function LoginScreen() {
   const [idFocused, setIdFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
 
+  // Validate locally before touching the network — no point making an API call
+  // when the ID format is obviously wrong.
   const handleSignIn = async () => {
     setError('');
     if (!validateSaudiId(idNumber)) {
@@ -145,7 +147,9 @@ export default function LoginScreen() {
               <TextInput
                 style={styles.input}
                 value={idNumber}
-                onChangeText={(t) => {
+                // Strip non-digits on every keystroke so the user can't accidentally
+              // type dashes or spaces and get confused by a validation error.
+              onChangeText={(t) => {
                   setIdNumber(t.replace(/\D/g, '').slice(0, 10));
                   setError('');
                 }}

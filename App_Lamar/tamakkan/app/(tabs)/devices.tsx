@@ -102,7 +102,8 @@ export default function DevicesScreen() {
 
   const [connectingId, setConnectingId] = useState<string | null>(null);
 
-  // Load previously paired devices from Supabase on mount
+  // Load previously paired devices from Supabase on mount.
+  // addSavedDevice deduplicates by ID, so calling it per-device on every mount is safe.
   useEffect(() => {
     if (!user?.id) return;
     getDevices(user.id).then((devices) => {
@@ -118,7 +119,7 @@ export default function DevicesScreen() {
       return;
     }
     setConnectingId(device.id);
-    // Simulate reconnection (backend not ready)
+    // Placeholder delay until the real reconnect handshake with the Jetson is wired up.
     await new Promise((r) => setTimeout(r, 1500));
     setDashcamConnected(true, { ...device, lastConnected: new Date().toISOString() });
     setConnectingId(null);
@@ -143,7 +144,9 @@ export default function DevicesScreen() {
     );
   };
 
-  // ── Device list view ───────────────────────────────────────────────────────
+  // Two completely different layouts live in the same component: device list when the user
+  // has at least one paired device, setup guide when they have none. Avoids a separate route
+  // for the "first-time onboarding" case and keeps the back navigation natural.
   if (savedDevices.length > 0) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>

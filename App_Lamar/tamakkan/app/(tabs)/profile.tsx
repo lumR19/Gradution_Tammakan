@@ -61,6 +61,7 @@ export default function ProfileScreen() {
   const logout = useAuthStore((s) => s.logout);
   const setDashcamConnected = useSessionStore((s) => s.setDashcamConnected);
 
+  // First letter of each word, capped at 2 characters — handles both "Ahmed" and "Ahmed Al-Rashidi".
   const initials = user
     ? user.name
         .split(' ')
@@ -77,8 +78,11 @@ export default function ProfileScreen() {
         text: 'Log Out',
         style: 'destructive',
         onPress: () => {
+          // Clear the dashcam connection first so the home screen doesn't render the
+          // "connected" state if a different user logs in during the same app session.
           setDashcamConnected(false);
           logout();
+          // replace() so the back gesture can't bring the logged-out user back to their data.
           router.replace('/(auth)/login');
         },
       },

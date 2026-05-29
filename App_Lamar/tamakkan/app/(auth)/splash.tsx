@@ -82,12 +82,16 @@ export default function SplashScreen() {
 
   const isLast = index === SLIDES.length - 1;
 
+  // Manually scroll the FlatList AND update the index state so the dots stay
+  // in sync whether the user taps Next or physically swipes between slides.
   const goNext = () => {
     const next = index + 1;
     listRef.current?.scrollToIndex({ index: next, animated: true });
     setIndex(next);
   };
 
+  // Permissions are requested here, once, before any screen that actually needs them.
+  // Denying either one is fine — the app degrades gracefully, so we never block the user.
   const getStarted = async () => {
     setLoading(true);
     try {

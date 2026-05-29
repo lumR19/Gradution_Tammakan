@@ -28,6 +28,7 @@ function formatTime(iso: string): string {
   });
 }
 
+// Module-level maps so they're not recreated on every AlertRow render.
 const MISTAKE_ICONS: Record<string, IconName> = {
   lane_departure: 'road-variant',
   tailgating:     'car-multiple',
@@ -122,9 +123,12 @@ export default function TripDetailScreen() {
   const userId = useAuthStore((s) => s.user?.id ?? 'u_001');
   const storeSessions = useSessionStore((s) => s.sessions);
 
+  // Initializer tries the in-memory store first — avoids an AsyncStorage read when the user
+  // navigates here directly from the session list where data is already loaded.
   const [session, setSession] = useState<DrivingSession | null>(
     () => storeSessions.find((s) => s.id === id) ?? null,
   );
+  // loading starts false when we already have the session from the store.
   const [loading, setLoading] = useState(session === null);
 
   useEffect(() => {

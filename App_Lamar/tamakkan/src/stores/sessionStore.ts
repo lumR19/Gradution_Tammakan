@@ -44,6 +44,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   startSession: (sessionId) => set({ activeSessionId: sessionId }),
 
+  // Prepend so the newest session always appears first on the history screen
+  // without needing a re-sort pass.
   stopSession: (completedSession) =>
     set((state) => ({
       activeSessionId: null,
@@ -55,6 +57,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setLoadingStats: (isLoadingStats) => set({ isLoadingStats }),
   setLoadingSessions: (isLoadingSessions) => set({ isLoadingSessions }),
 
+  // Remove any existing entry with the same id before inserting at the top,
+  // so reconnecting an already-known device just refreshes its lastConnected timestamp.
   addSavedDevice: (device) => {
     const existing = get().savedDevices;
     const withoutDuplicate = existing.filter((d) => d.id !== device.id);

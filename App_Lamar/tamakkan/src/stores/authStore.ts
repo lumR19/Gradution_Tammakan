@@ -6,6 +6,8 @@ import { setAuthToken } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { getUserProfile, signOut as supabaseSignOut } from '../services/supabaseService';
 
+// Token goes into SecureStore (encrypted on-device) while the user profile
+// goes into AsyncStorage — SecureStore can't hold large JSON objects.
 const TOKEN_KEY = 'auth_token';
 const USER_KEY  = 'auth_user';
 
@@ -29,6 +31,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   userType: null,
   isLoading: false,
 
+  // Two-stage restore: first try the live Supabase session (handles token refresh),
+  // then fall back to the cached credentials for offline/cold-start scenarios.
   initialize: async () => {
     // 1. Try restoring from Supabase persisted session (AsyncStorage under the hood)
     try {
@@ -65,6 +69,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, token, isAuthenticated: true, userType: user.userType });
   },
 
+  // Clear everything immediately so the UI redirects before storage catches up.
+  // The Supabase sign-out and storage deletions run fire-and-forget.
   logout: () => {
     supabaseSignOut().catch(() => {});
     setAuthToken(null);

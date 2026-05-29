@@ -13,6 +13,8 @@ export function formatDuration(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+// Thresholds chosen to be encouraging — 60% still gets a positive label
+// so new drivers aren't immediately demoralized after their first few sessions.
 export function getScoreLabel(score: number, maxScore = 5): ScoreLabel {
   const pct = (score / maxScore) * 100;
   if (pct >= 90) return 'EXCELLENT';
@@ -34,6 +36,8 @@ export function formatScore(score: number, maxScore = 100): string {
   return Math.round(score).toString();
 }
 
+// Formats a stored +966XXXXXXXXX number into the readable +966 5X XXX XXXX style
+// shown on the profile screen. Falls back to the raw string if it doesn't match.
 export function formatPhoneDisplay(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('966') && digits.length === 12) {

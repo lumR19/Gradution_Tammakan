@@ -12,6 +12,8 @@ type RoleCardProps = {
   title: string;
   description: string;
   onPress: () => void;
+  // Optional flag so we can show future roles on the screen without wiring them up yet.
+  // The card renders at 0.7 opacity and fires an Alert instead of navigating.
   comingSoon?: boolean;
 };
 
@@ -60,6 +62,8 @@ export default function UserTypeScreen() {
 
   const handleIndividual = () => router.push('/(auth)/login');
 
+  // Single handler shared by both locked roles — keeps the Alert wording consistent
+  // and avoids duplicating the same two-line function for Trainee and Instructor.
   const handleComingSoon = (role: string) => {
     Alert.alert(
       `${role} Flow`,

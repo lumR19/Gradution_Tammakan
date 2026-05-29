@@ -244,6 +244,8 @@ export default function LiveSessionScreen() {
   const jetsonIp           = useSettingsStore((s) => s.jetsonIp);
 
   // ── State ──
+  // elapsedRef is the authoritative value read at stop-time; `elapsed` state drives the timer display.
+  // Using a ref avoids a stale-closure problem inside the setInterval callback.
   const elapsedRef = useRef(0);
   const [elapsed, setElapsed] = useState(0);
   const [score, setScore] = useState(5.0);
@@ -259,7 +261,8 @@ export default function LiveSessionScreen() {
   const [sessionNameDraft, setSessionNameDraft] = useState('');
   const [finalEvents, setFinalEvents] = useState<SessionEventDTO[]>([]);
 
-  // ── Layout constants (needed before refs for Animated.Value init) ──
+  // availH is the usable height between the HUD and the bottom safe area.
+  // 48% gives the panel roughly half the screen at rest, leaving a proper road view above.
   const availH     = screenH - insets.top - insets.bottom - HUD_HEIGHT;
   const initPanelH = Math.round(availH * 0.48 + 16);
   const MIN_PANEL_H = 80;
@@ -270,13 +273,18 @@ export default function LiveSessionScreen() {
   const roadAnim    = useRef(new Animated.Value(0)).current;
   const panelHeight = useRef(new Animated.Value(initPanelH)).current;
   const bannerTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the banner is currently in its slid-in position so we skip the spring
+  // animation if a new alert fires while the banner is already visible.
   const bannerVisibleRef = useRef(false);
   const wsRef            = useRef<WebSocket | null>(null);
+  // voiceEnabledRef mirrors the toggle so the WebSocket closure always reads the current value
+  // — closures capture the value at creation time, not on every update.
   const voiceEnabledRef  = useRef(voiceAlertsEnabled);
   const sessionActiveRef = useRef(true);   // flipped to false the moment STOP is pressed
   const sessionEndedRef  = useRef(false);  // set when backend sends status: ended
 
-  // ── Panel drag (height-based — shrinks downward, no gap ever) ──
+  // Panel is resized by animating its height rather than translateY so the road view
+  // above it expands when the panel collapses — no gap ever appears between them.
   const panDragStart   = useRef(initPanelH);
   const panelHeightVal = useRef(initPanelH);
 
@@ -313,7 +321,8 @@ export default function LiveSessionScreen() {
   // ── Layout ──
   const bannerTop = insets.top + HUD_HEIGHT + 10;
 
-  // ── Road animation ──
+  // Dashes translate downward by one full DASH_CYCLE then loop — gives the illusion of
+  // the road scrolling toward the viewer. Linear easing so there's no acceleration jitter.
   useEffect(() => {
     const anim = Animated.loop(
       Animated.timing(roadAnim, {
@@ -451,6 +460,7 @@ export default function LiveSessionScreen() {
               severity: dispSeverity,
               timestamp: Math.round(data.session_time_s ?? 0),
             };
+            // Cap at 20 entries so the list stays snappy on long drives.
             setAlertLog((prev) => [entry, ...prev].slice(0, 20));
             setScore((prev) => {
               const delta = scorePenalty(entry.type, entry.subtype);
@@ -465,6 +475,8 @@ export default function LiveSessionScreen() {
 
         ws.onclose = () => {
           wsRef.current = null;
+          // Auto-reconnect unless the user stopped the session, the backend ended it,
+          // or the effect is cleaning up. 4 s gives the Jetson time to recover.
           if (!destroyed && sessionActiveRef.current && !sessionEndedRef.current) {
             reconnectTimer = setTimeout(connect, 4000);
           }
@@ -483,7 +495,9 @@ export default function LiveSessionScreen() {
     };
   }, [showBanner, speakAlert, jetsonIp, activeSessionId]);
 
-  // ── Stop handler — freezes session immediately, then calls POST /trips/end ──
+  // Freezes the session UI immediately so the user sees a score at once.
+  // The POST to the backend runs after — if it succeeds, the final score and event list
+  // are updated; if not, the local snapshot is kept.
   function handleStop() {
     sessionActiveRef.current = false;   // stops all new alerts + TTS at the gate
     Speech.stop();
@@ -522,6 +536,8 @@ export default function LiveSessionScreen() {
       durationMinutes: Math.max(1, Math.ceil(finalElapsed / 60)),
       score: finalScore,
       scoreLabel: getScoreLabel(finalScore),
+      // Prefer the server-confirmed event list; fall back to the locally-tracked alertLog
+      // if the Jetson stopSession call failed or returned nothing.
       mistakes: finalEvents.length > 0
         ? finalEvents.map((e, idx) => ({
             id: `${e.event_type}_${idx}_${e.timestamp}`,
@@ -545,7 +561,7 @@ export default function LiveSessionScreen() {
     const uid = user?.id ?? 'u_001';
     getTripCache(uid).then((cached) => saveTripCache(uid, [session, ...cached]));
 
-    // Persist to Supabase — fire-and-forget so the UI never blocks
+    // 'u_001' is the dev fallback ID that doesn't exist in Supabase — skip the DB write for it.
     if (uid !== 'u_001') {
       saveSessionToDb(
         session,

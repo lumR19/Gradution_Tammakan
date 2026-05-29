@@ -1,3 +1,5 @@
+// Three roles are planned, but only 'individual' is live right now.
+// Trainee and instructor flows get unlocked in future releases.
 export type UserType = 'individual' | 'trainee' | 'instructor';
 
 export interface User {
@@ -13,14 +15,14 @@ export interface User {
 export type ScoreLabel = 'EXCELLENT' | 'GOOD' | 'IMPROVING' | 'NEEDS WORK';
 
 // Only what the Jetson's sensors can actually detect (see BACKEND_SPEC.md §2).
-// harsh_braking / harsh_acceleration / speeding / phone_use / drowsiness removed —
-// no IMU, no driver-facing camera, no vehicle-speed source.
 export type MistakeType =
   | 'lane_departure'
   | 'tailgating'
   | 'red_light'
   | 'near_miss';
 
+// A single safety event captured during a session.
+// timestamp is relative to session start, not a wall-clock time.
 export interface Mistake {
   id: string;
   type: MistakeType;
@@ -57,6 +59,8 @@ export interface DrivingStats {
   lastScore?: number;
 }
 
+// Represents a paired Jetson device. The id here is a local UUID assigned at pairing time,
+// not the MAC address — the MAC is used for deduplication on the Supabase side.
 export interface DashcamDevice {
   id: string;
   name: string;

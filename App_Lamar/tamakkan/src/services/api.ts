@@ -26,6 +26,8 @@ export function setAuthToken(token: string | null) {
   _authToken = token;
 }
 
+// Reading the IP from the store on every request means the user can update it
+// in Settings and the next call immediately picks up the new address without restarting.
 api.interceptors.request.use((config) => {
   const { jetsonIp } = useSettingsStore.getState();
   config.baseURL = `http://${jetsonIp}:8000`;
@@ -121,6 +123,8 @@ export async function connectDashcam(deviceId: string): Promise<DashcamDevice> {
 
 // ─── Session — Jetson REST ─────────────────────────────────────────────────────
 
+// If the Jetson isn't reachable yet (still booting, wrong IP), fall back to a
+// timestamp-based local ID so the session can still start and collect alerts.
 export async function startSession(deviceId: string): Promise<{ session_id: string }> {
   try {
     const res = await api.post<{ session_id: string }>('/sessions/start', {
@@ -132,6 +136,8 @@ export async function startSession(deviceId: string): Promise<{ session_id: stri
   }
 }
 
+// Returning null instead of throwing lets the caller decide whether to use
+// the locally computed score or wait for the Jetson's authoritative version.
 export async function stopSession(sessionId: string): Promise<SessionSummary | null> {
   try {
     const res = await api.post<SessionSummary>(`/sessions/${sessionId}/stop`);

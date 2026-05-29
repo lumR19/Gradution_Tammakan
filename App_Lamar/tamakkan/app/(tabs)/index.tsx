@@ -23,6 +23,7 @@ import ScoreRing from '@/components/features/ScoreRing';
 import { formatDate, formatDuration, getScoreColor } from '@/utils/formatters';
 import { DrivingSession } from '@/types';
 
+// Defined at module level so it isn't recreated on every render inside the component.
 const severityColor = (s: 'medium' | 'high' | 'critical') =>
   s === 'high' || s === 'critical' ? Colors.error.DEFAULT
   : Colors.tertiary.DEFAULT;
@@ -71,6 +72,9 @@ export default function HomeScreen() {
   const firstName = (user?.name ?? '').split(' ')[0] || 'User';
   const [showVideoModal, setShowVideoModal] = useState(false);
 
+  // user.id (stable primitive) instead of user (new object reference each render) prevents
+  // this effect from re-firing every time the auth store selector returns a fresh object.
+  // Cache, stats, and tip all fire in parallel — none of them depends on the other.
   useEffect(() => {
     if (!user) return;
     getTripCache(user.id).then((cached) => {
@@ -80,6 +84,7 @@ export default function HomeScreen() {
     getDailyTip().then(setDailyTip).catch(() => {});
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // sessions[0] is always the most recent because sessionStore.stopSession prepends new entries.
   const lastSession = sessions[0] ?? null;
   const averageScore = sessions.length > 0
     ? Number((sessions.reduce((s, d) => s + d.score, 0) / sessions.length).toFixed(2))
@@ -88,6 +93,7 @@ export default function HomeScreen() {
   const totalAlerts = sessions.reduce((sum, s) => sum + s.mistakes.length, 0);
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // Hardcoded fallback so the tip card is never empty even when the API call fails.
   const tipText =
     dailyTip?.content ??
     'Maintaining a 3-second gap from the car ahead reduces harsh braking by 40%.';
@@ -286,7 +292,7 @@ export default function HomeScreen() {
                   </LinearGradient>
                 </TouchableOpacity>
 
-                {/* Older sessions below the hero card */}
+                {/* Capped at 2 older entries — enough context without crowding the hero. Full history lives in the Progress tab. */}
                 {sessions.slice(1, 3).map((s) => (
                   <SessionCard key={s.id} session={s} />
                 ))}
@@ -388,7 +394,8 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* ── Video Player Modal ── */}
+      {/* Rendered as a Modal rather than a separate route so the home screen state underneath
+          is preserved — no need to pass the session object through navigation params. */}
       <Modal
         visible={showVideoModal}
         animationType="slide"

@@ -22,6 +22,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { signUp as supabaseSignUp } from '@/services/supabaseService';
 import { validateSaudiId, validateSaudiPhone } from '@/utils/validators';
 
+// Auto-inserts the slashes as the user types, so they never have to type DD/MM/YYYY manually.
+// Strips non-digits first so pasting a formatted date still works correctly.
 const formatDob = (raw: string) => {
   const d = raw.replace(/\D/g, '').slice(0, 8);
   if (d.length <= 2) return d;
@@ -91,6 +93,8 @@ export default function SignUpScreen() {
         phone: phone ? `+966${phone}` : undefined,
         dob: dob || undefined,
       });
+      // Supabase sometimes requires email verification before issuing a session token.
+      // In that case we skip auto-login and send the user to the login screen manually.
       if (token) {
         storeLogin(user, token);
         router.replace('/(tabs)');

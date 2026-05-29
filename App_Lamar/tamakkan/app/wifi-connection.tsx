@@ -49,6 +49,7 @@ const STEPS: Step[] = [
   },
 ];
 
+// Real WebSocket constants are commented out until the Jetson backend is deployed.
 // const WS_URL = 'ws://tamakkan.local:8000/ws/drive';  // restore when backend is ready
 // const TIMEOUT_MS = 6000;
 
@@ -62,6 +63,8 @@ export default function WifiConnectionScreen() {
   const setDashcamConnected = useSessionStore((s) => s.setDashcamConnected);
   const user = useAuthStore((s) => s.user);
 
+  // Cleanup both the timeout and the WebSocket so there's no dangling callback
+  // if the user navigates away mid-connection.
   useEffect(() => {
     return () => {
       timerRef.current && clearTimeout(timerRef.current);
@@ -95,6 +98,8 @@ export default function WifiConnectionScreen() {
         upsertDevice(user.id, device).catch(() => {});
       }
 
+      // Second timeout gives the user a moment to see the "Connected" status before navigating.
+      // When coming from the Devices tab, skip starting a session and just go home.
       timerRef.current = setTimeout(async () => {
         if (from === 'devices') {
           router.replace('/(tabs)/');

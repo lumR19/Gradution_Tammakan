@@ -1,3 +1,5 @@
+// Single shared Supabase client — import this wherever you need DB or auth access.
+// Never create a second client; it would open a duplicate realtime channel.
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -9,6 +11,8 @@ export const supabase = createClient(
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
+      // React Native has no URL scheme to detect OAuth callbacks through,
+      // so turning this off prevents a harmless but noisy warning on startup.
       detectSessionInUrl: false,
     },
   },

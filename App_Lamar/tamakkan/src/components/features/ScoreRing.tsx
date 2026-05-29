@@ -29,7 +29,8 @@ export default function ScoreRing({
   const targetOffset = circumference * (1 - progress);
   const center = size / 2;
 
-  // Start at circumference (empty ring) and animate to the actual fill
+  // Ring starts fully empty (offset = full circumference) and fills toward the target.
+  // This gives the satisfying "filling up" effect every time the component mounts.
   const animOffset = useRef(new Animated.Value(circumference)).current;
 
   useEffect(() => {
@@ -79,6 +80,8 @@ export default function ScoreRing({
           fill="none"
           strokeDasharray={circumference}
           strokeDashoffset={animOffset}
+          // SVG arcs start at the 3 o'clock position. Rotating -90° makes the fill
+          // begin from the top, which feels more natural for a score indicator.
           strokeLinecap="round"
           rotation="-90"
           origin={`${center}, ${center}`}

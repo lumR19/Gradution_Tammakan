@@ -70,6 +70,8 @@ export async function signIn(
   nationalId: string,
   password: string,
 ): Promise<{ user: User; token: string }> {
+  // Supabase Auth requires an email field. Since users register by national ID,
+  // we construct a virtual email using a tamakkan.sa domain that never actually receives mail.
   const email = `${nationalId}@tamakkan.sa`;
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
@@ -152,6 +154,8 @@ export async function saveSessionToDb(
   const dangerCount  = session.mistakes.filter((m) => m.severity !== 'medium').length;
   const warningCount = session.mistakes.filter((m) => m.severity === 'medium').length;
 
+  // device_id is a foreign key in Supabase. Local mock IDs like 'cam_1234567'
+  // aren't valid UUIDs, so we null them out to avoid a constraint violation.
   const { error: sessionError } = await supabase.from('sessions').insert({
     id: session.id,
     user_id: userId,
@@ -187,7 +191,8 @@ export async function saveSessionToDb(
     await supabase.from('alerts').insert(alertRows);
   }
 
-  // Compute 7-day rolling average for score_history
+  // Rolling 7-day average gives a smoother trend line than a single session score.
+  // This is what the Home screen's "vs last week" percentage is based on.
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data: recentScores } = await supabase
     .from('score_history')
@@ -350,6 +355,8 @@ export async function getDevices(userId: string): Promise<DashcamDevice[]> {
   }));
 }
 
+// MAC address is the conflict key — if the same physical device pairs again
+// on a different session, this just updates the record rather than creating a duplicate.
 export async function upsertDevice(
   userId: string,
   device: DashcamDevice,

@@ -201,6 +201,7 @@ export default function ProgressScreen() {
   const setSessions = useSessionStore((s) => s.setSessions);
 
   const [trips, setTrips] = useState<DrivingSession[]>([]);
+  // computeStats iterates over all trips — memo keeps it from re-running on every parent render.
   const stats = useMemo(() => computeStats(trips), [trips]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -209,6 +210,8 @@ export default function ProgressScreen() {
   const pageRef = useRef(1);
   const fetchingRef = useRef(false);
 
+  // Cache loads synchronously on mount so the list is populated before any network call completes.
+  // This avoids a spinner flash when navigating back to this tab after the first load.
   const loadFromCache = useCallback(async () => {
     const cached = await getTripCache(userId);
     if (cached.length > 0) {
@@ -219,13 +222,16 @@ export default function ProgressScreen() {
 
   const fetchPage = useCallback(
     async (page: number, append = false) => {
+      // ref guard instead of state so toggling it never triggers a re-render.
+      // onEndReached can fire multiple times before the previous fetch resolves.
       if (fetchingRef.current) return;
       fetchingRef.current = true;
       try {
         const { trips: fresh, hasMore: more } = await getTrips(userId, page, PAGE_SIZE);
         setHasMore(more);
         setTrips((prev) => {
-          // Preserve locally-saved sessions (not returned by API) at the top
+          // On a fresh page-1 fetch, keep any sessions the user saved in-app that the API
+          // doesn't know about yet (e.g. saved mid-session before the backend caught up).
           const freshIds = new Set(fresh.map((s) => s.id));
           const localOnly = page === 1 ? prev.filter((s) => !freshIds.has(s.id)) : [];
           const next = append ? [...prev, ...fresh] : [...localOnly, ...fresh];
@@ -241,6 +247,8 @@ export default function ProgressScreen() {
     [userId, setSessions],
   );
 
+  // Show cached data immediately, then flip loading off without waiting for the network.
+  // Pull-to-refresh is the user-driven path to get fresh data from the server.
   useEffect(() => {
     (async () => {
       await loadFromCache();
