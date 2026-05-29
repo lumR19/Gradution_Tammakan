@@ -734,35 +734,33 @@ export default function LiveSessionScreen() {
       </Animated.View>
 
       {/* ── Alert banner (slides from below HUD) ────────────────────────────── */}
-      <Animated.View
-        style={[
-          styles.banner,
-          {
-            top: bannerTop,
-            borderLeftColor: bannerAlert ? severityAccent(bannerAlert.severity) : Colors.error.DEFAULT,
-            transform: [{ translateY: bannerY }],
-          },
-        ]}
-        pointerEvents="none"
-      >
-        {bannerAlert && (
-          <>
-            <View style={[styles.bannerIconWrap, { backgroundColor: `${severityAccent(bannerAlert.severity)}33` }]}>
-              <MaterialCommunityIcons
-                name={bannerAlert.severity === 'danger' ? 'alert-circle' : 'alert'}
-                size={22}
-                color={severityFg(bannerAlert.severity)}
-              />
-            </View>
-            <Text style={styles.bannerMsg} numberOfLines={2}>{bannerAlert.message}</Text>
-            <View style={[styles.bannerChip, { backgroundColor: `${severityAccent(bannerAlert.severity)}44` }]}>
-              <Text style={[styles.bannerChipTxt, { color: severityFg(bannerAlert.severity) }]}>
-                {bannerAlert.severity === 'danger' ? 'DANGER' : 'WARN'}
-              </Text>
-            </View>
-          </>
-        )}
-      </Animated.View>
+      {bannerAlert && (
+        <Animated.View
+          style={[
+            styles.banner,
+            {
+              top: bannerTop,
+              borderLeftColor: severityAccent(bannerAlert.severity),
+              transform: [{ translateY: bannerY }],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <View style={[styles.bannerIconWrap, { backgroundColor: `${severityAccent(bannerAlert.severity)}33` }]}>
+            <MaterialCommunityIcons
+              name={bannerAlert.severity === 'danger' ? 'alert-circle' : 'alert'}
+              size={22}
+              color={severityFg(bannerAlert.severity)}
+            />
+          </View>
+          <Text style={styles.bannerMsg} numberOfLines={2}>{bannerAlert.message}</Text>
+          <View style={[styles.bannerChip, { backgroundColor: `${severityAccent(bannerAlert.severity)}44` }]}>
+            <Text style={[styles.bannerChipTxt, { color: severityFg(bannerAlert.severity) }]}>
+              {bannerAlert.severity === 'danger' ? 'DANGER' : 'WARN'}
+            </Text>
+          </View>
+        </Animated.View>
+      )}
 
       {/* ── Session Summary Modal ─────────────────────────────────────────────── */}
       <Modal
