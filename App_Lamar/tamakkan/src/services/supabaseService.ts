@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { User, DrivingSession, DrivingStats, DrivingTip, DashcamDevice, ScoreLabel, MistakeType } from '../types';
 import type { SessionEventDTO } from './api';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+//  Helpers 
 
 export function uuidv4(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -64,7 +64,7 @@ function mapDbToSession(row: Record<string, any>): DrivingSession {
   };
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+//  Auth 
 
 export async function signIn(
   nationalId: string,
@@ -139,7 +139,7 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
 
-// ─── Sessions ─────────────────────────────────────────────────────────────────
+//  Sessions 
 
 export async function saveSessionToDb(
   session: DrivingSession,
@@ -307,7 +307,7 @@ export async function computeStats(userId: string): Promise<DrivingStats> {
   };
 }
 
-// ─── Tips ─────────────────────────────────────────────────────────────────────
+//  Tips 
 
 const FALLBACK_TIP =
   'Maintain a safe following distance of at least 3 seconds from the vehicle ahead.';
@@ -336,7 +336,7 @@ export async function getDailyTip(): Promise<DrivingTip> {
   };
 }
 
-// ─── Devices ──────────────────────────────────────────────────────────────────
+//  Devices 
 
 export async function getDevices(userId: string): Promise<DashcamDevice[]> {
   const { data } = await supabase

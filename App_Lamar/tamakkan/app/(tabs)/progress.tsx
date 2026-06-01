@@ -22,7 +22,7 @@ import { formatDate, formatDuration, getScoreColor } from '@/utils/formatters';
 
 const PAGE_SIZE = 10;
 
-// ── Stats helpers ──────────────────────────────────────────────────────────────
+//  Stats helpers 
 
 type TripStats = {
   totalTrips: number;
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  // ── Header (Lamar style) ──
+  //  Header  
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
   listEmpty: {
     flex: 1,
   },
-  // ── Stats card ──
+  //  Stats card 
   statsCard: {
     backgroundColor: Colors.surface.containerLowest,
     borderRadius: 20,
@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.tertiary.DEFAULT,
   },
-  // ── Trip card ──
+  //  Trip card 
   cardWrap: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     gap: 2,
     flexShrink: 0,
   },
-  // ── Score badge ──
+  //  Score badge 
   scoreBadge: {
     borderRadius: 10,
     borderWidth: 1.5,
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: -1,
   },
-  // ── Empty state ──
+  //  Empty state 
   emptyWrap: {
     flex: 1,
     alignItems: 'center',

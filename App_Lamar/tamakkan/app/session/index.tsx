@@ -30,7 +30,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { getScoreLabel } from '@/utils/formatters';
 import { DrivingSession, MistakeType } from '@/types';
 
-// ─── WebSocket — spec: ws://<jetson-ip>:8000/ws/session/{session_id} ─────────
+//  WebSocket — spec: ws://<jetson-ip>:8000/ws/session/{session_id} 
 // Shape of messages pushed by the Jetson (BACKEND_SPEC.md §3).
 interface JetsonMessage {
   kind: 'alert' | 'speed_limit' | 'status';
@@ -48,7 +48,7 @@ interface JetsonMessage {
   timestamp?: number;
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+//  Types 
 type AlertSeverity = 'danger' | 'warning';
 
 interface AlertEntry {
@@ -66,7 +66,7 @@ const BANNER_H = 64;
 const DASH_CYCLE = 80; // dash height + gap
 const N_DASHES = 8;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+//  Helpers 
 function severityFg(s: AlertSeverity) {
   return s === 'danger' ? Colors.error.container : Colors.tertiary.fixedDim;
 }
@@ -103,7 +103,7 @@ function eventLabel(type: MistakeType, subtype?: string): string {
   }
 }
 
-// ─── Top-down car (realistic sedan) ──────────────────────────────────────────
+//  Top-down car (realistic sedan) 
 function TopDownCar() {
   return (
     <View style={tdCar.wrapper}>
@@ -130,7 +130,7 @@ function TopDownCar() {
         <View style={tdCar.hood} />
         {/* Windshield */}
         <View style={tdCar.windshield} />
-        {/* Cabin — narrowed with side margins to show roofline */}
+        {/* Cabin , narrowed with side margins to show roofline */}
         <View style={tdCar.cabin} />
         {/* Rear window */}
         <View style={tdCar.rearWindow} />
@@ -232,7 +232,7 @@ const tdCar = StyleSheet.create({
   trunk: { height: 16, backgroundColor: '#d4d4d4' },
 });
 
-// ─── Component ───────────────────────────────────────────────────────────────
+//  Component 
 export default function LiveSessionScreen() {
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
@@ -243,7 +243,7 @@ export default function LiveSessionScreen() {
   const voiceAlertsEnabled = useSettingsStore((s) => s.voiceAlertsEnabled);
   const jetsonIp           = useSettingsStore((s) => s.jetsonIp);
 
-  // ── State ──
+  //  State 
   // elapsedRef is the authoritative value read at stop-time; `elapsed` state drives the timer display.
   // Using a ref avoids a stale-closure problem inside the setInterval callback.
   const elapsedRef = useRef(0);
@@ -267,7 +267,7 @@ export default function LiveSessionScreen() {
   const initPanelH = Math.round(availH * 0.48 + 16);
   const MIN_PANEL_H = 80;
 
-  // ── Animations ──
+  //  Animations 
   const recPulse    = useRef(new Animated.Value(1)).current;
   const bannerY     = useRef(new Animated.Value(-BANNER_H - 8)).current;
   const roadAnim    = useRef(new Animated.Value(0)).current;
@@ -318,7 +318,7 @@ export default function LiveSessionScreen() {
   ).current;
 
 
-  // ── Layout ──
+  //  Layout 
   const bannerTop = insets.top + HUD_HEIGHT + 10;
 
   // Dashes translate downward by one full DASH_CYCLE then loop — gives the illusion of
@@ -336,7 +336,7 @@ export default function LiveSessionScreen() {
     return () => anim.stop();
   }, [roadAnim]);
 
-  // ── Banner controller ──
+  //  Banner controller 
   const showBanner = useCallback(
     (entry: AlertEntry) => {
       setBannerAlert(entry);
@@ -364,13 +364,13 @@ export default function LiveSessionScreen() {
     [bannerY],
   );
 
-  // ── Sync voice ref so WebSocket closure always reads current value ──
+  //  Sync voice ref so WebSocket closure always reads current value 
   useEffect(() => {
     voiceEnabledRef.current = voiceEnabled;
     if (!voiceEnabled) Speech.stop();
   }, [voiceEnabled]);
 
-  // ── TTS — speaks the alert twice in English ──
+  //  TTS , speaks the alert twice in English 
   const speakAlert = useCallback((text: string) => {
     if (!voiceEnabledRef.current) return;
     Speech.stop();
@@ -382,7 +382,7 @@ export default function LiveSessionScreen() {
     });
   }, []);
 
-  // ── REC pulsing ──
+  //  REC pulsing 
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
@@ -394,7 +394,7 @@ export default function LiveSessionScreen() {
     return () => anim.stop();
   }, [recPulse]);
 
-  // ── Timer ──
+  //  Timer 
   useEffect(() => {
     const id = setInterval(() => {
       elapsedRef.current += 1;
@@ -406,12 +406,12 @@ export default function LiveSessionScreen() {
 
   // Speed limit is driven by WS speed_limit messages; no mock cycling needed.
 
-  // ── Cleanup ──
+  //  Cleanup 
   useEffect(() => {
     return () => { if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current); };
   }, []);
 
-  // ── WebSocket — Jetson real-time channel (BACKEND_SPEC.md §3) ───────────────
+  //  WebSocket — Jetson real-time channel (BACKEND_SPEC.md §3) 
   // ws://<jetson-ip>:8000/ws/session/{session_id}
   useEffect(() => {
     if (!activeSessionId) return;
@@ -431,7 +431,7 @@ export default function LiveSessionScreen() {
           try {
             const data: JetsonMessage = JSON.parse(evt.data as string);
 
-            // ── Speed-limit update ──────────────────────────────────────────
+            //  Speed-limit update 
             if (data.kind === 'speed_limit') {
               if (data.limit_kmh != null) {
                 setDetectedSpeed(data.limit_kmh);
@@ -440,13 +440,13 @@ export default function LiveSessionScreen() {
               return;
             }
 
-            // ── Session status ──────────────────────────────────────────────
+            //  Session status 
             if (data.kind === 'status') {
               if (data.state === 'ended') sessionEndedRef.current = true;
               return;
             }
 
-            // ── Alert ───────────────────────────────────────────────────────
+            //  Alert 
             if (data.kind !== 'alert' || !data.event_type || !data.message_en) return;
 
             const dispSeverity: AlertSeverity =
@@ -471,7 +471,7 @@ export default function LiveSessionScreen() {
           } catch { /* ignore malformed frames */ }
         };
 
-        ws.onerror = () => { /* silent — Jetson not yet connected */ };
+        ws.onerror = () => { /* silent , Jetson not yet connected */ };
 
         ws.onclose = () => {
           wsRef.current = null;
@@ -561,7 +561,7 @@ export default function LiveSessionScreen() {
     const uid = user?.id ?? 'u_001';
     getTripCache(uid).then((cached) => saveTripCache(uid, [session, ...cached]));
 
-    // 'u_001' is the dev fallback ID that doesn't exist in Supabase — skip the DB write for it.
+    // 'u_001' is the dev fallback ID that doesn't exist in Supabase , skip the DB write for it.
     if (uid !== 'u_001') {
       saveSessionToDb(
         session,
@@ -593,7 +593,7 @@ export default function LiveSessionScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
 
-      {/* ── HUD bar ─────────────────────────────────────────────────────────── */}
+      {/*  HUD bar  */}
       <View style={styles.hud}>
         <Text style={styles.timer}>{formatTime(elapsed)}</Text>
 
@@ -625,7 +625,7 @@ export default function LiveSessionScreen() {
         </View>
       </View>
 
-      {/* ── Video / Road simulation ──────────────────────────────────────────── */}
+      {/*  Video / Road simulation  */}
       <View style={styles.video}>
         {/* Sky gradient */}
         <LinearGradient colors={['#0d1f1f', '#1a3535']} style={StyleSheet.absoluteFillObject} />
@@ -686,7 +686,7 @@ export default function LiveSessionScreen() {
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.videoFade} />
       </View>
 
-      {/* ── Bottom panel (height shrinks on drag, no gap possible) ─────────── */}
+      {/*  Bottom panel (height shrinks on drag, no gap possible)  */}
       <Animated.View
         style={[
           styles.panel,
@@ -733,7 +733,7 @@ export default function LiveSessionScreen() {
         </ScrollView>
       </Animated.View>
 
-      {/* ── Alert banner (slides from below HUD) ────────────────────────────── */}
+      {/*  Alert banner (slides from below HUD)  */}
       {bannerAlert && (
         <Animated.View
           style={[
@@ -762,7 +762,7 @@ export default function LiveSessionScreen() {
         </Animated.View>
       )}
 
-      {/* ── Session Summary Modal ─────────────────────────────────────────────── */}
+      {/*  Session Summary Modal  */}
       <Modal
         visible={showSummary}
         animationType="slide"
@@ -867,7 +867,7 @@ export default function LiveSessionScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ── Naming overlay — lives inside the summary modal so it stacks correctly ── */}
+          {/*  Naming overlay — lives inside the summary modal so it stacks correctly  */}
           {showNameModal && (
             <KeyboardAvoidingView
               style={styles.nameOverlay}
@@ -914,11 +914,11 @@ export default function LiveSessionScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+//  Styles 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.surface.inverse },
 
-  // ── HUD ──
+  //  HUD 
   hud: {
     height: HUD_HEIGHT,
     flexDirection: 'row',
@@ -997,7 +997,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
 
-  // ── Video / Road ──
+  //  Video / Road 
   video: {
     flex: 1,
     width: '100%',
@@ -1161,7 +1161,7 @@ const styles = StyleSheet.create({
     height: 64,
   },
 
-  // ── Panel ──
+  //  Panel 
   panel: {
     backgroundColor: Colors.surface.containerLowest,
     borderTopLeftRadius: 24,
@@ -1260,7 +1260,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // ── Banner ──
+  //  Banner 
   banner: {
     position: 'absolute',
     left: 12,
@@ -1307,7 +1307,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // ── Summary Modal ──
+  //  Summary Modal 
   summaryRoot: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -1487,7 +1487,7 @@ const styles = StyleSheet.create({
     color: Colors.error.DEFAULT,
   },
 
-  // ── Session Naming Modal ──
+  //  Session Naming Modal 
   nameOverlay: {
     position: 'absolute',
     top: 0,

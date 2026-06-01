@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 export default function RootLayout() {
-  // Settings are loaded here — at the root — so the Jetson IP and voice toggle
+  // Settings are loaded here — at the root , so the Jetson IP and voice toggle
   // are ready before the first screen that needs them even mounts.
   const { loaded, load } = useSettingsStore();
   useEffect(() => { if (!loaded) load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps

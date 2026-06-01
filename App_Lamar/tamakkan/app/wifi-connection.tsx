@@ -78,7 +78,7 @@ export default function WifiConnectionScreen() {
 
     timerRef.current && clearTimeout(timerRef.current);
 
-    // ── MOCK: always succeeds after 2 s (swap for real WebSocket when backend is ready) ──
+    //  MOCK: always succeeds after 2 s (swap for real WebSocket when backend is ready) 
     timerRef.current = setTimeout(() => {
       const device: DashcamDevice = {
         id: 'cam_' + Date.now(),
@@ -120,7 +120,7 @@ export default function WifiConnectionScreen() {
       }, 1000);
     }, 2000);
 
-    // ── REAL WebSocket (uncomment when backend is ready) ──
+    //  REAL WebSocket (uncomment when backend is ready) 
     // const ws = new WebSocket(WS_URL);
     // wsRef.current = ws;
     // timerRef.current = setTimeout(() => { ws.close(); setStatus('failed'); }, TIMEOUT_MS);
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
 
-  // ── Header ──
+  //  Header 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,14 +297,14 @@ const styles = StyleSheet.create({
     color: Colors.surface.on,
   },
 
-  // ── Scroll ──
+  //  Scroll 
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 28,
     gap: 24,
   },
 
-  // ── Title block ──
+  //  Title block 
   titleBlock: {
     gap: 8,
   },
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // ── Steps ──
+  //  Steps 
   steps: {
     gap: 0,
   },
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // ── Bottom bar ──
+  //  Bottom bar 
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.outline.variant,
   },
 
-  // ── Status card ──
+  //  Status card 
   statusCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ── Connect button ──
+  //  Connect button 
   connectBtn: {
     borderRadius: 16,
     overflow: 'hidden',

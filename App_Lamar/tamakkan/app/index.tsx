@@ -17,7 +17,7 @@ export default function Index() {
         duration: 200,
         useNativeDriver: true,
       }),
-      // Steady, clearly visible zoom-out over 2s — linear feel so every
+      // Steady, clearly visible zoom-out over 2s , linear feel so every
       // frame of shrinking is equally visible
       Animated.timing(logoScale, {
         toValue: 1,
@@ -40,7 +40,7 @@ export default function Index() {
   }, []);
 
   // Auth check runs after the animation finishes so the user never sees a blank
-  // redirect — the logo stays visible for the full zoom-out before anything changes.
+  // redirect , the logo stays visible for the full zoom-out before anything changes.
   const navigate = async () => {
     await useAuthStore.getState().initialize();
     const isAuthenticated = useAuthStore.getState().isAuthenticated;

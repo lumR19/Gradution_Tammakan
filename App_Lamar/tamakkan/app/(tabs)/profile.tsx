@@ -61,7 +61,7 @@ export default function ProfileScreen() {
   const logout = useAuthStore((s) => s.logout);
   const setDashcamConnected = useSessionStore((s) => s.setDashcamConnected);
 
-  // First letter of each word, capped at 2 characters — handles both "Ahmed" and "Ahmed Al-Rashidi".
+  // First letter of each word, capped at 2 characters , handles both "Ahmed" and "Ahmed Al-Rashidi".
   const initials = user
     ? user.name
         .split(' ')
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  // ── Header ──
+  //  Header 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -198,13 +198,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary.DEFAULT,
   },
-  // ── Scroll ──
+  //  Scroll 
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 24,
     gap: 16,
   },
-  // ── Avatar section ──
+  //  Avatar section 
   avatarSection: {
     alignItems: 'center',
     gap: 10,
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.secondary.onContainer,
   },
-  // ── Card ──
+  //  Card 
   card: {
     backgroundColor: Colors.surface.containerLowest,
     borderRadius: 24,
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface.containerHigh,
     marginVertical: 4,
   },
-  // ── Info row ──
+  //  Info row 
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.surface.on,
   },
-  // ── Menu row ──
+  //  Menu row 
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -331,14 +331,14 @@ const styles = StyleSheet.create({
   menuLabelDanger: {
     color: Colors.error.DEFAULT,
   },
-  // ── App version ──
+  //  App version 
   version: {
     fontSize: 12,
     color: Colors.outline.DEFAULT,
     textAlign: 'center',
     marginTop: 4,
   },
-  // ── Log out ──
+  //  Log out 
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',

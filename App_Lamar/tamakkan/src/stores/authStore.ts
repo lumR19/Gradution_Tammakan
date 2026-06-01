@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { getUserProfile, signOut as supabaseSignOut } from '../services/supabaseService';
 
 // Token goes into SecureStore (encrypted on-device) while the user profile
-// goes into AsyncStorage — SecureStore can't hold large JSON objects.
+// goes into AsyncStorage , SecureStore can't hold large JSON objects.
 const TOKEN_KEY = 'auth_token';
 const USER_KEY  = 'auth_user';
 
@@ -48,7 +48,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           return;
         }
       }
-    } catch { /* network down — fall through to local cache */ }
+    } catch { /* network down , fall through to local cache */ }
 
     // 2. Fallback: SecureStore / AsyncStorage from a previous session
     try {

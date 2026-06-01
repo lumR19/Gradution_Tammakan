@@ -45,7 +45,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   // Apply to state immediately so the UI reacts without waiting for the disk write.
-  // The explicit toSave object is intentional — it keeps the `loaded` flag out of storage.
+  // The explicit toSave object is intentional , it keeps the `loaded` flag out of storage.
   update: async (patch: Partial<AppSettings>) => {
     set(patch);
     const s = get();

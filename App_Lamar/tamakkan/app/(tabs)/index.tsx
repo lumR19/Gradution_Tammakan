@@ -137,7 +137,7 @@ export default function HomeScreen() {
 
         {dashcamConnected ? (
           <>
-            {/* ── CONNECTED STATE ─────────────────── */}
+            {/*  CONNECTED STATE  */}
 
             {/* Start Driving button */}
             <TouchableOpacity
@@ -156,7 +156,7 @@ export default function HomeScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Stats — only visible once the user has at least one saved session */}
+            {/* Stats , only visible once the user has at least one saved session */}
             {sessions.length > 0 ? (
               <>
                 {/* Average Score card */}
@@ -240,7 +240,7 @@ export default function HomeScreen() {
 
             {lastSession ? (
               <>
-                {/* Most recent — tappable hero card with video */}
+                {/* Most recent , tappable hero card with video */}
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onPress={() => setShowVideoModal(true)}
@@ -255,7 +255,7 @@ export default function HomeScreen() {
                     </View>
                   </LinearGradient>
 
-                  {/* Score circle — top right */}
+                  {/* Score circle , top right */}
                   <View style={[styles.lastDriveScore, { borderColor: getScoreColor(lastSession.score) }]}>
                     <Text style={[styles.lastDriveScoreNum, { color: getScoreColor(lastSession.score) }]}>
                       {lastSession.score.toFixed(1)}
@@ -263,14 +263,14 @@ export default function HomeScreen() {
                     <Text style={styles.lastDriveScorePts}>/5</Text>
                   </View>
 
-                  {/* Play button — center */}
+                  {/* Play button , center */}
                   <View style={styles.lastSessionPlayOverlay}>
                     <View style={styles.lastSessionPlayBtn}>
                       <MaterialCommunityIcons name="play" size={28} color="#fff" />
                     </View>
                   </View>
 
-                  {/* Info bar — bottom */}
+                  {/* Info bar , bottom */}
                   <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.85)']}
                     style={styles.lastSessionInfoOverlay}
@@ -292,7 +292,7 @@ export default function HomeScreen() {
                   </LinearGradient>
                 </TouchableOpacity>
 
-                {/* Capped at 2 older entries — enough context without crowding the hero. Full history lives in the Progress tab. */}
+                {/* Capped at 2 older entries , enough context without crowding the hero. Full history lives in the Progress tab. */}
                 {sessions.slice(1, 3).map((s) => (
                   <SessionCard key={s.id} session={s} />
                 ))}
@@ -306,7 +306,7 @@ export default function HomeScreen() {
           </>
         ) : (
           <>
-            {/* ── PRE-CONNECT STATE ─────────────────── */}
+            {/*  PRE-CONNECT STATE  */}
 
             {/* DashCam status card */}
             <View style={styles.dashcamCard}>
@@ -395,7 +395,7 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* Rendered as a Modal rather than a separate route so the home screen state underneath
-          is preserved — no need to pass the session object through navigation params. */}
+          is preserved , no need to pass the session object through navigation params. */}
       <Modal
         visible={showVideoModal}
         animationType="slide"
@@ -438,7 +438,7 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {/* ── Session Summary ── */}
+            {/*  Session Summary  */}
             {lastSession && (
               <View style={styles.summarySection}>
 
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  // ── Header ──
+  //  Header 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -550,13 +550,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // ── Scroll ──
+  //  Scroll 
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 24,
     gap: 16,
   },
-  // ── Greeting ──
+  //  Greeting 
   greeting: {
     gap: 4,
   },
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.surface.onVariant,
   },
-  // ── CONNECTED: Start button ──
+  //  CONNECTED: Start button 
   startBtn: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  // ── CONNECTED: Score card ──
+  //  CONNECTED: Score card 
   scoreCard: {
     backgroundColor: Colors.surface.containerLowest,
     borderRadius: 24,
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.secondary.DEFAULT,
   },
-  // ── CONNECTED: Mini cards ──
+  //  CONNECTED: Mini cards 
   miniCardRow: {
     flexDirection: 'row',
     gap: 12,
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.surface.on,
   },
-  // ── CONNECTED: Improvement card ──
+  //  CONNECTED: Improvement card 
   improvementCard: {
     backgroundColor: Colors.surface.inverse,
     borderRadius: 24,
@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  // ── CONNECTED: Tip card ──
+  //  CONNECTED: Tip card 
   tipCard: {
     backgroundColor: Colors.primary.container,
     borderRadius: 24,
@@ -774,7 +774,7 @@ const styles = StyleSheet.create({
     borderRadius: 64,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  // ── CONNECTED: Last session ──
+  //  CONNECTED: Last session 
   lastSessionCard: {
     borderRadius: 24,
     overflow: 'hidden',
@@ -824,7 +824,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
     marginTop: 2,
   },
-  // ── PRE-CONNECT: DashCam card ──
+  //  PRE-CONNECT: DashCam card 
   dashcamCard: {
     backgroundColor: Colors.surface.containerLowest,
     borderRadius: 24,
@@ -886,7 +886,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  // ── PRE-CONNECT: Stats row ──
+  //  PRE-CONNECT: Stats row 
   statsRow: {
     flexDirection: 'row',
     gap: 12,
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.surface.onVariant,
   },
-  // ── PRE-CONNECT: Focus card ──
+  //  PRE-CONNECT: Focus card 
   focusCard: {
     backgroundColor: Colors.primary.container,
     borderRadius: 24,
@@ -974,7 +974,7 @@ const styles = StyleSheet.create({
     color: `${Colors.primary.onContainer}CC`,
     lineHeight: 18,
   },
-  // ── Shared: Section header + sessions ──
+  //  Shared: Section header + sessions 
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1060,7 +1060,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  // ── Last Drive enhancements ──
+  //  Last Drive enhancements 
   lastDriveScore: {
     position: 'absolute',
     top: 12,
@@ -1095,7 +1095,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
     fontWeight: '500',
   },
-  // ── Video Modal ──
+  //  Video Modal 
   videoModal: {
     flex: 1,
     backgroundColor: '#0a0f0f',
@@ -1149,7 +1149,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-  // ── Session Summary ──
+  //  Session Summary 
   summarySection: {
     padding: 20,
     gap: 20,

@@ -196,7 +196,7 @@ export default function DevicesScreen() {
     );
   }
 
-  // ── Empty / setup view (no saved devices yet) ──────────────────────────────
+  //  Empty / setup view (no saved devices yet) 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -291,8 +291,7 @@ export default function DevicesScreen() {
   );
 }
 
-// ── Setup steps data ──────────────────────────────────────────────────────────
-
+//  Setup steps data 
 const STEPS: {
   num: number;
   title: string;
@@ -319,7 +318,7 @@ const STEPS: {
   },
 ];
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// Styles 
 
 const styles = StyleSheet.create({
   container: {
@@ -327,7 +326,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
 
-  // ── Header ──
+  //  Header 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -362,7 +361,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ── Device list ──
+  //  Device list 
   listScroll: {
     paddingHorizontal: 20,
     paddingTop: 24,
@@ -470,7 +469,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // ── Bottom bar ──
+  //  Bottom bar 
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -499,7 +498,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 
-  // ── Setup / empty view ──
+  //  Setup / empty view 
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 24,

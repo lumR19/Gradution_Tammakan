@@ -10,7 +10,7 @@ import {
 import { useSettingsStore } from '../stores/settingsStore';
 import * as sb from './supabaseService';
 
-// ─── Jetson REST client ────────────────────────────────────────────────────────
+//  Jetson REST client 
 // Only used for Jetson-specific calls: /sessions/start, /sessions/{id}/stop, /health.
 // Auth, history, stats, tips → Supabase (see below).
 
@@ -35,7 +35,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ─── Session DTOs (used by session/index.tsx and supabaseService) ──────────────
+//  Session DTOs (used by session/index.tsx and supabaseService) 
 
 export interface SessionEventDTO {
   event_type: 'lane_departure' | 'tailgating' | 'red_light' | 'near_miss';
@@ -58,13 +58,13 @@ export interface SessionSummary {
   metadata: { speed_limits_seen?: number[]; model_fps_avg?: number };
 }
 
-// ─── Auth — Supabase ───────────────────────────────────────────────────────────
+//  Auth — Supabase 
 
 export async function login(nationalId: string, password: string): Promise<AuthResponse> {
   return sb.signIn(nationalId, password);
 }
 
-// ─── Team-backend data — Supabase ─────────────────────────────────────────────
+//  Team-backend data — Supabase 
 
 export async function getSessions(userId: string): Promise<DrivingSession[]> {
   const { trips } = await sb.getSessions(userId, 1, 50);
@@ -104,7 +104,7 @@ export async function getTrips(
   return sb.getSessions(userId, page, pageSize);
 }
 
-// ─── Device — still local (Jetson handshake is Wi-Fi / SSID based) ────────────
+//  Device — still local (Jetson handshake is Wi-Fi / SSID based) 
 
 export async function connectDashcam(deviceId: string): Promise<DashcamDevice> {
   try {
@@ -121,7 +121,7 @@ export async function connectDashcam(deviceId: string): Promise<DashcamDevice> {
   }
 }
 
-// ─── Session — Jetson REST ─────────────────────────────────────────────────────
+//  Session — Jetson REST 
 
 // If the Jetson isn't reachable yet (still booting, wrong IP), fall back to a
 // timestamp-based local ID so the session can still start and collect alerts.

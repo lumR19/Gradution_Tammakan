@@ -19,7 +19,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-// ── Custom slider ──────────────────────────────────────────────────────────────
+//  Custom slider 
 
 // Custom slider because Expo Go on Android doesn't ship the RN community slider at SDK 54.
 // trackWidth is measured via onLayout because we can't know the rendered width at paint time.
@@ -85,7 +85,7 @@ const sliderStyles = StyleSheet.create({
   tickLabel: { fontSize: 11, color: Colors.outline.DEFAULT },
 });
 
-// ── Row components ─────────────────────────────────────────────────────────────
+//  Row components 
 
 function SectionTitle({ label }: { label: string }) {
   return <Text style={styles.sectionTitle}>{label}</Text>;
@@ -121,7 +121,7 @@ function ToggleRow({
   );
 }
 
-// ── Screen ─────────────────────────────────────────────────────────────────────
+//  Screen 
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();

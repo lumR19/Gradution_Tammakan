@@ -3,7 +3,7 @@ import { Animated, Easing, View, Text } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Colors from '@/theme/colors';
 
-// Animated SVG circle — useNativeDriver must be false for SVG prop animations
+// Animated SVG circle , useNativeDriver must be false for SVG prop animations
 const AnimatedCircle = Animated.createAnimatedComponent(Circle) as any;
 
 interface ScoreRingProps {

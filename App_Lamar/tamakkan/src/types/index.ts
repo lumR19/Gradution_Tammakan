@@ -60,7 +60,7 @@ export interface DrivingStats {
 }
 
 // Represents a paired Jetson device. The id here is a local UUID assigned at pairing time,
-// not the MAC address — the MAC is used for deduplication on the Supabase side.
+// not the MAC address , the MAC is used for deduplication on the Supabase side.
 export interface DashcamDevice {
   id: string;
   name: string;

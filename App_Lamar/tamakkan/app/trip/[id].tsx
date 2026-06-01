@@ -42,7 +42,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   critical: Colors.error.DEFAULT,
 };
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
+//  Sub-components 
 
 function VideoSection({ videoUrl }: { videoUrl?: string }) {
   const videoRef = useRef<Video>(null);
@@ -115,7 +115,7 @@ function AlertRow({ mistake }: { mistake: Mistake }) {
   );
 }
 
-// ── Screen ─────────────────────────────────────────────────────────────────────
+//  Screen 
 
 export default function TripDetailScreen() {
   const insets = useSafeAreaInsets();
